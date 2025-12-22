@@ -1,15 +1,30 @@
 import express, { type Application } from "express";
-import scraperRoute from "./Scraper/route.ts";
-import { scraperLimiter } from "./ipLimit/ipLimit.ts";
+import cors from "cors";
+
+import scraperRoute from "./module/scraper/Product_Scraper/route.ts";
+import { scraperLimiter } from "./module/scraper/ipLimit/ipLimit.ts";
 import { rateLimitLogger } from "./util/rateLimitLogger.ts";
 
 const app: Application = express();
 
+/* ✅ CORS MUST COME FIRST */
+app.use(cors({
+  origin: "http://localhost:5173",
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"],
+}));
+
 app.use(express.json());
-app.use("/api/scraper", scraperLimiter, rateLimitLogger , scraperRoute);
+
+app.use(
+  "/api/scraper",
+  scraperLimiter,
+  rateLimitLogger,
+  scraperRoute
+);
+
 app.get("/", (req, res) => {
   res.send("Craftlore backend is running!");
 });
-
 
 export default app;
