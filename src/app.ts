@@ -4,10 +4,10 @@ import cors from "cors";
 import scraperRoute from "./module/scraper/Product_Scraper/route.ts";
 import { scraperLimiter } from "./module/scraper/ipLimit/ipLimit.ts";
 import { rateLimitLogger } from "./util/rateLimitLogger.ts";
+import giRoute from "./module/gi/route.ts";
 
 const app: Application = express();
 
-/* ✅ CORS MUST COME FIRST */
 app.use(cors({
   origin: "http://localhost:5173",
   methods: ["GET", "POST"],
@@ -15,7 +15,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
-
+app.use("/api/gi", giRoute);
 app.use(
   "/api/scraper",
   scraperLimiter,

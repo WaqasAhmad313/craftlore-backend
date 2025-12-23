@@ -5,12 +5,10 @@ export async function createGIProductController(
   req: Request,
   res: Response
 ) {
-  const payload = req.body;
-
-  const productId = await createGIProduct(payload);
+  const productId = await createGIProduct(req.body);
 
   res.status(201).json({
     success: true,
-    productId
+    productId,
   });
 }
