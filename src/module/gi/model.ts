@@ -7,7 +7,7 @@ export async function insertGIProduct(
   const result = await db.query<
     { product_id: number }
   >(
-    `SELECT insert_gi_product_full($1::jsonb) AS product_id`,
+    `SELECT insert_gi_product_full_updated($1::jsonb) AS product_id`,
     [payload]
   );
 
