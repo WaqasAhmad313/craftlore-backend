@@ -1,6 +1,5 @@
 import express, { type Application } from "express";
 import cors from "cors";
-
 import scraperRoute from "./module/scraper/Product_Scraper/route.ts";
 import { scraperLimiter } from "./module/scraper/ipLimit/ipLimit.ts";
 import { rateLimitLogger } from "./util/rateLimitLogger.ts";
