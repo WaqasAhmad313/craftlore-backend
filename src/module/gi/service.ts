@@ -1,4 +1,5 @@
 import GICraftModel from './model.ts';
+import type { GICraft, GICraftDetail } from './model.ts';
 
 interface FilterOptions {
   search?: string;
@@ -16,7 +17,7 @@ class GICraftService {
   /**
    * Get all crafts with optional filtering
    */
-  static async getAllCrafts(filters: FilterOptions = {}): Promise<ServiceResponse<any[]>> {
+  static async getAllCrafts(filters: FilterOptions = {}): Promise<ServiceResponse<GICraft[]>> {
     try {
       const crafts = await GICraftModel.getAllCrafts();
       
@@ -28,7 +29,8 @@ class GICraftService {
         filteredCrafts = filteredCrafts.filter(craft => 
           craft.name?.toLowerCase().includes(searchTerm) ||
           craft.gi_applicant?.toLowerCase().includes(searchTerm) ||
-          craft.category?.toLowerCase().includes(searchTerm)
+          craft.category?.toLowerCase().includes(searchTerm) ||
+          craft.description?.toLowerCase().includes(searchTerm)
         );
       }
 
@@ -50,11 +52,34 @@ class GICraftService {
   }
 
   /**
-   * Get a single craft by ID
+   * Get a single craft by ID with full details
    */
-  static async getCraftById(id: number): Promise<ServiceResponse<any>> {
+  static async getCraftById(id: number): Promise<ServiceResponse<GICraftDetail>> {
     try {
       const craft = await GICraftModel.getCraftById(id);
+      
+      if (!craft) {
+        return {
+          success: false,
+          message: 'Craft not found'
+        };
+      }
+
+      return {
+        success: true,
+        data: craft
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Get a single craft by slug with full details
+   */
+  static async getCraftBySlug(slug: string): Promise<ServiceResponse<GICraftDetail>> {
+    try {
+      const craft = await GICraftModel.getCraftBySlug(slug);
       
       if (!craft) {
         return {
@@ -90,50 +115,3 @@ class GICraftService {
 }
 
 export default GICraftService;
-
-
-
-// import { giProductSchema } from "./validator.ts";
-// import { insertGIProduct, getProducts, deleteProduct } from "./model.ts";
-// import {
-//   getGIProductById,
-//   getGIProductBySlug,
-//   type GIProduct,
-// } from "./model.ts";
-
-// export async function fetchGIProductById(id: number): Promise<GIProduct> {
-//   const product = await getGIProductById(id);
-
-//   if (!product) {
-//     throw new Error(`GI product with ID ${id} not found`);
-//   }
-
-//   return product;
-// }
-
-// export async function fetchGIProductBySlug(slug: string): Promise<GIProduct> {
-//   const product = await getGIProductBySlug(slug);
-
-//   if (!product) {
-//     throw new Error(`GI product with slug "${slug}" not found`);
-//   }
-
-//   return product;
-// }
-
-
-// export async function createGIProduct(payload: unknown): Promise<number> {
-//   const parsed = giProductSchema.parse(payload);
-//   return insertGIProduct(parsed);
-// }
-// export async function fetchGIProducts() {
-//   return getProducts();
-// }
-// export async function removeGIProduct(productId: number): Promise<void> {
-//   return deleteProduct(productId);
-// }
-
-// export async function searchProductByName(name:string){
-//   const products = await getProducts();
-//   return products.filter((product:any) => product.name.toLowerCase().includes(name.toLowerCase()));
-// }
