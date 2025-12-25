@@ -14,7 +14,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
-app.use("/api/gi", giRoute);
+app.use("/api/gi-crafts", giRoute);
 app.use(
   "/api/scraper",
   scraperLimiter,
