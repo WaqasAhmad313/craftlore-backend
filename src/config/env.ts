@@ -8,14 +8,6 @@ const __dirname = path.dirname(__filename);
 // Load from multiple possible locations
 const result = dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
-// Debug output
-console.log("=== Environment Debug ===");
-console.log("Looking for .env at:", path.resolve(__dirname, "../../.env"));
-console.log("dotenv result:", result);
-console.log("DB_HOST from process.env:", process.env.DB_HOST);
-console.log("All env keys:", Object.keys(process.env).filter(k => k.startsWith('DB_')));
-console.log("========================\n");
-
 function required(key: string): string {
   const value = process.env[key];
   if (!value) {

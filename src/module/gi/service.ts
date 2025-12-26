@@ -20,6 +20,7 @@ class GICraftService {
   static async getAllCrafts(filters: FilterOptions = {}): Promise<ServiceResponse<GICraft[]>> {
     try {
       const crafts = await GICraftModel.getAllCrafts();
+      console.log('Total crafts fetched:', crafts.length);
       
       let filteredCrafts = crafts;
 

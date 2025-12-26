@@ -32,7 +32,7 @@ class GICraftModel {
    */
   static async getAllCrafts(): Promise<GICraft[]> {
     try {
-      const result: QueryResult<GICraft> = await db.query('SELECT * FROM get_gi_products_list()');
+      const result: QueryResult<GICraft> = await db.query('SELECT * FROM get_all_gi_crafts()');
       return result.rows;
     } catch (error: any) {
       throw new Error(`Database error: ${error.message}`);
