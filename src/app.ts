@@ -11,7 +11,7 @@ const app: Application = express();
 app.use(morgan("dev"));
 app.use(cors({
   origin: "http://localhost:5173",
-  methods: ["GET", "POST"],
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
   allowedHeaders: ["Content-Type"],
 }));
 

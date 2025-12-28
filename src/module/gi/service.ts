@@ -1,5 +1,5 @@
 import GICraftModel from "./model.ts";
-import type { GICraft, GICraftDetail } from "./model.ts";
+import type { GICraft, GICraftDetail, UpsertGIProductInput, UpsertGIProductResult } from "./model.ts";
 
 interface FilterOptions {
   search?: string;
@@ -139,6 +139,42 @@ class GICraftService {
         return { success: false, message: error.message };
       }
       return { success: false, message: "Unknown error" };
+    }
+  }
+
+    /**
+   * Create or update a GI craft
+   */
+  static async upsertCraft(
+    payload: UpsertGIProductInput
+  ): Promise<ServiceResponse<UpsertGIProductResult>> {
+    try {
+      const result = await GICraftModel.upsertCraft(payload);
+
+      if (result.operation_status === "error") {
+        return {
+          success: false,
+          message: result.message,
+        };
+      }
+
+      return {
+        success: true,
+        data: result,
+        message: result.message,
+      };
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return {
+          success: false,
+          message: error.message,
+        };
+      }
+
+      return {
+        success: false,
+        message: "Unknown service error",
+      };
     }
   }
 }

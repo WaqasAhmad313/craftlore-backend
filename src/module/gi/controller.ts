@@ -90,6 +90,8 @@ class GICraftController {
    * Delete a craft by ID
    */
   static async deleteCraftById(req: Request, res: Response): Promise<Response> {
+    console.log("DELETE controller hit with ID:", req.params.id);
+
     try {
       const idParam = req.params.id;
 
@@ -121,6 +123,48 @@ class GICraftController {
       return res
         .status(500)
         .json({ success: false, message: "Unknown server error" });
+    }
+  }
+
+    /**
+   * POST /api/gi-crafts
+   * Create or update a GI craft
+   */
+  static async upsertCraft(req: Request, res: Response): Promise<Response> {
+    try {
+      const payload = req.body;
+
+      if (!payload || !payload.name || !payload.gi_application_number) {
+        return res.status(400).json({
+          success: false,
+          message: "Required fields are missing",
+        });
+      }
+
+      const result = await GICraftService.upsertCraft(payload);
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+
+      // created → 201, updated → 200
+      const statusCode =
+        result.data?.operation_status === "created" ? 201 : 200;
+
+      return res.status(statusCode).json(result);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error("Error in upsertCraft controller:", error.message);
+        return res.status(500).json({
+          success: false,
+          message: error.message,
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: "Unknown server error",
+      });
     }
   }
 }
