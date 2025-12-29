@@ -4,20 +4,21 @@ import type { CreateEntityApplicationInput } from './model.ts';
 
 class EntityApplicationController {
   static async createApplication(req: Request, res: Response): Promise<Response> {
+    console.log(`frontend data: ${JSON.stringify(req.body)}`);
     try {
       const payload: CreateEntityApplicationInput = {
-        entity_type: req.body.entity_type,
-        display_name: req.body.display_name,
-        legal_name: req.body.legal_name ?? null,
-        email: req.body.email,
-        website: req.body.website ?? null,
-        authorized_user_number: req.body.authorized_user_number,
-        category: req.body.category ?? null,
-        address_info: req.body.address_info,
-        banking_info: req.body.banking_info ?? null,
-        public_description: req.body.public_description ?? null,
+        entity_type: req.body.p_entity_type,
+        display_name: req.body.p_display_name,
+        legal_name: req.body.p_legal_name ?? null,
+        email: req.body.p_email,
+        website: req.body.p_website ?? null,
+        authorized_user_number: req.body.p_authorized_user_number,
+        category: req.body.p_category ?? null,
+        address_info: req.body.p_address_info,
+        banking_info: req.body.p_banking_info ?? null,
+        public_description: req.body.p_public_description ?? null,
       };
-
+      console.log(`backend payload: ${JSON.stringify(payload)}`);
       const serviceResponse =
         await EntityApplicationService.createApplication(payload);
 
