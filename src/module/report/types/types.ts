@@ -33,6 +33,7 @@ export type MulterFile = Express.Multer.File;
 
 export type EvidenceFilesResult = {
   receipt?: string | null;
+  gi_QRcode_closeups?: string[] | null;
   product_photos?: string[] | null;
   packaging_photos?: string[] | null;
   certificates?: string[] | null;

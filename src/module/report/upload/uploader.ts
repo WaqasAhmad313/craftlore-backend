@@ -66,6 +66,7 @@ export class EvidenceUploader {
 
     // Multi-file fields
     result.product_photos = await uploadGroup("product_photos");
+    result.gi_QRcode_closeups = await uploadGroup("gi_QRcode_closeups");
     result.packaging_photos = await uploadGroup("packaging_photos");
     result.certificates = await uploadGroup("certificates");
     result.listing_screenshots = await uploadGroup("listing_screenshots");

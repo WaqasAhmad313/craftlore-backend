@@ -10,6 +10,7 @@ const upload = multer({ storage });
 // Define all possible file fields
 const fileFields = [
   { name: 'receipt', maxCount: 1 },
+  { name: 'gi_QRcode_closeups', maxCount: 1 },
   { name: 'product_photos', maxCount: 10 },
   { name: 'packaging_photos', maxCount: 10 },
   { name: 'certificates', maxCount: 10 },

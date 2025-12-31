@@ -6,6 +6,7 @@ import { scraperLimiter } from "./module/scraper/ipLimit/ipLimit.ts";
 import { rateLimitLogger } from "./util/rateLimitLogger.ts";
 import giRoute from "./module/gi/route.ts";
 import entityApplicationRoutes from './module/entityApplications/route.ts';
+import counterfeitReportRoutes from './module/report/route.ts';
 
 const app: Application = express();
 
@@ -17,6 +18,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
+app.use("/api", counterfeitReportRoutes);
 app.use("/api/gi-crafts", giRoute);
 app.use("/api/entity-applications", entityApplicationRoutes);
 app.use(
