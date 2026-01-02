@@ -4,6 +4,10 @@ import { EvidenceUploader } from './upload/uploader.ts';
 import type {
   CreateOrUpdateReportParams,
   UpsertCounterfeitReportResult,
+  BaseCounterfeitReport,
+  CounterfeitReportWithCount,
+  GetCounterfeitReportParams,
+  GetAllCounterfeitReportsParams,
   ReportStatus,
 } from './types/types.ts';
 
@@ -17,7 +21,7 @@ export class CounterfeitReportService {
     // Step 2: Prepare upsert params
     const upsertParams = {
       ...params,
-      evidenceFiles, // null or structured JSON
+      evidenceFiles,
     };
 
     // Step 3: Upsert report
@@ -26,7 +30,10 @@ export class CounterfeitReportService {
     // Step 4: Extract reporter email
     const reporterInfo = params.reporterInfo as { email?: string };
     const reporterEmail = reporterInfo.email;
-    if (!reporterEmail) throw new Error('Reporter email is required');
+
+    if (!reporterEmail) {
+      throw new Error('Reporter email is required');
+    }
 
     // Step 5: Send mail
     if (result.created) {
@@ -36,16 +43,54 @@ export class CounterfeitReportService {
       });
     }
 
-    // If status is provided and not 'pending', assume it's updated and send status mail
     if (!result.created && params.status && params.status !== 'pending') {
       await CounterfeitReportMailer.sendStatusUpdated({
         to: reporterEmail,
         trackingId: result.trackingId,
-        oldStatus: 'pending', // default old status for new updates
+        oldStatus: 'pending',
         newStatus: params.status,
       });
     }
 
     return result;
+  }
+
+  static async getReport(
+    params: GetCounterfeitReportParams
+  ): Promise<BaseCounterfeitReport> {
+    return CounterfeitReportModel.getByIdOrTracking(params);
+  }
+
+  static async getReports(
+    params: GetAllCounterfeitReportsParams
+  ): Promise<CounterfeitReportWithCount[]> {
+    return CounterfeitReportModel.getAll(params);
+  }
+
+  // NEW METHOD - Update status only
+  static async updateReportStatus(params: {
+    id: string;
+    status: string;
+  }): Promise<void> {
+    // Step 1: Get current report to get reporter email and tracking ID
+    const report = await CounterfeitReportModel.getByIdOrTracking({ id: params.id });
+
+    const oldStatus = report.status;
+
+    // Step 2: Update status in database
+    await CounterfeitReportModel.updateStatus(params.id, params.status);
+
+    // Step 3: Send status update email
+    const reporterInfo = report.reporter_info as { email?: string };
+    const reporterEmail = reporterInfo.email;
+
+    if (reporterEmail && params.status !== oldStatus) {
+      await CounterfeitReportMailer.sendStatusUpdated({
+        to: reporterEmail,
+        trackingId: report.tracking_id,
+        oldStatus,
+        newStatus: params.status as ReportStatus,
+      });
+    }
   }
 }

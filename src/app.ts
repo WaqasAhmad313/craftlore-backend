@@ -7,18 +7,20 @@ import { rateLimitLogger } from "./util/rateLimitLogger.ts";
 import giRoute from "./module/gi/route.ts";
 import entityApplicationRoutes from './module/entityApplications/route.ts';
 import counterfeitReportRoutes from './module/report/route.ts';
+import heroRoutes from './module/hero/route.ts';
 
 const app: Application = express();
 
 app.use(morgan("dev"));
 app.use(cors({
   origin: "http://localhost:5173",
-  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  methods: ['GET','POST','PUT','DELETE','OPTIONS', 'PATCH'],
   allowedHeaders: ["Content-Type"],
 }));
 
 app.use(express.json());
 app.use("/api", counterfeitReportRoutes);
+app.use("/api/heroes", heroRoutes);
 app.use("/api/gi-crafts", giRoute);
 app.use("/api/entity-applications", entityApplicationRoutes);
 app.use(
