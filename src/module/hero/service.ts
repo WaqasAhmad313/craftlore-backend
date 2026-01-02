@@ -1,7 +1,3 @@
-// ============================================================================
-// HERO SERVICE - Business Logic Layer
-// ============================================================================
-
 import { HeroModel } from "./model.ts";
 import type {
   UpsertHeroParams,
@@ -113,5 +109,61 @@ export class HeroService {
     }
 
     return await HeroModel.delete({ id });
+  }
+
+  /**
+   * Claim a hero profile by tracking_id
+   */
+  static async claimHero(
+    trackingId: string,
+    story: string
+  ): Promise<{ success: boolean; message: string }> {
+    // Validate tracking_id
+    if (!trackingId || !trackingId.trim()) {
+      throw new Error("Tracking ID is required");
+    }
+
+    // Validate story
+    if (!story || !story.trim()) {
+      throw new Error("Story is required");
+    }
+
+    const trimmedStory = story.trim();
+
+    // Validate story length (min 50, max 2000 characters)
+    if (trimmedStory.length < 50) {
+      throw new Error("Story must be at least 50 characters long");
+    }
+
+    if (trimmedStory.length > 2000) {
+      throw new Error("Story must not exceed 2000 characters");
+    }
+
+    // Call model to update database
+    await HeroModel.claimHero(trackingId, trimmedStory);
+
+    return {
+      success: true,
+      message: "Hero claimed successfully!",
+    };
+  }
+
+  /**
+   * Get all claimed heroes for public display
+   */
+  static async getClaimedHeroes(): Promise<
+    Array<{
+      id: string;
+      full_name: string;
+      hero_level: string;
+      badge_icon: string;
+      craft_protected: string;
+      location: string | null;
+      recognition_date: string;
+      case_summary: string;
+      story: string;
+    }>
+  > {
+    return await HeroModel.getClaimedHeroes();
   }
 }

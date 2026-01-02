@@ -80,7 +80,7 @@ export class CounterfeitReportService {
     // Step 2: Update status in database
     await CounterfeitReportModel.updateStatus(params.id, params.status);
 
-    // Step 3: Send status update email
+    /* Step 3: Send status update email
     const reporterInfo = report.reporter_info as { email?: string };
     const reporterEmail = reporterInfo.email;
 
@@ -91,6 +91,6 @@ export class CounterfeitReportService {
         oldStatus,
         newStatus: params.status as ReportStatus,
       });
-    }
+    } */
   }
 }

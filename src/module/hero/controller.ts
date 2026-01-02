@@ -129,4 +129,63 @@ export class HeroController {
       next(error);
     }
   }
+
+  /**
+   * POST /api/hero/claim
+   * Claim a hero profile by tracking_id and story
+   */
+  static async claimHero(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { tracking_id, story } = req.body;
+
+      // Validate required fields
+      if (!tracking_id) {
+        res.status(400).json({
+          success: false,
+          message: "Tracking ID is required",
+        });
+        return;
+      }
+
+      if (!story) {
+        res.status(400).json({
+          success: false,
+          message: "Story is required",
+        });
+        return;
+      }
+
+      const result = await HeroService.claimHero(tracking_id, story);
+
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/heroes/claimed
+   * Get all claimed heroes for public display
+   */
+  static async getClaimedHeroes(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const heroes = await HeroService.getClaimedHeroes();
+
+      res.status(200).json({
+        success: true,
+        data: heroes,
+        count: heroes.length,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
