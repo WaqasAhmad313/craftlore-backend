@@ -1,5 +1,4 @@
 import { db } from '../../config/db.ts';
-import type { QueryResult } from 'pg';
 export type EntityType = 'ARTISAN' | 'BUSINESS' | 'INSTITUTION_NGO';
 
 interface CreateEntityApplicationInput {
@@ -13,6 +12,7 @@ interface CreateEntityApplicationInput {
   address_info: Record<string, unknown>;
   banking_info: Record<string, unknown>;
   public_description?: string | null;
+  consent: boolean; // ✅ added
 }
 
 interface CreateEntityApplicationResult {
@@ -29,7 +29,8 @@ class EntityApplicationModel {
     const query = `
       SELECT * FROM create_entity_application(
         $1, $2, $3, $4, $5,
-        $6, $7, $8, $9, $10
+        $6, $7, $8, $9, $10,
+        $11
       )
     `;
 
@@ -44,6 +45,7 @@ class EntityApplicationModel {
       payload.address_info,
       payload.banking_info,
       payload.public_description ?? null,
+      payload.consent, // ✅ added
     ];
 
     try {

@@ -5,6 +5,7 @@ import type { CreateEntityApplicationInput } from './model.ts';
 class EntityApplicationController {
   static async createApplication(req: Request, res: Response): Promise<Response> {
     console.log(`frontend data: ${JSON.stringify(req.body)}`);
+
     try {
       const payload: CreateEntityApplicationInput = {
         entity_type: req.body.p_entity_type,
@@ -17,8 +18,11 @@ class EntityApplicationController {
         address_info: req.body.p_address_info,
         banking_info: req.body.p_banking_info ?? null,
         public_description: req.body.p_public_description ?? null,
+        consent: req.body.p_consent === true,
       };
+
       console.log(`backend payload: ${JSON.stringify(payload)}`);
+
       const serviceResponse =
         await EntityApplicationService.createApplication(payload);
 

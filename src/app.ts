@@ -8,6 +8,7 @@ import giRoute from "./module/gi/route.ts";
 import entityApplicationRoutes from './module/entityApplications/route.ts';
 import counterfeitReportRoutes from './module/report/route.ts';
 import heroRoutes from './module/hero/route.ts';
+import authScrape from './module/scraper/Auth_Scraper/route.ts'
 
 const app: Application = express();
 
@@ -19,6 +20,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
+app.use("/api/auth-scrape", authScrape);
 app.use("/api", counterfeitReportRoutes);
 app.use("/api/heroes", heroRoutes);
 app.use("/api/gi-crafts", giRoute);

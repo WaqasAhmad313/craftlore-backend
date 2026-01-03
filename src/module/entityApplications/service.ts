@@ -1,5 +1,8 @@
-import EntityApplicationModel from './model.ts';
-import type { CreateEntityApplicationInput, CreateEntityApplicationResult } from './model.ts';
+import EntityApplicationModel from "./model.ts";
+import type {
+  CreateEntityApplicationInput,
+  CreateEntityApplicationResult,
+} from "./model.ts";
 
 interface ServiceResponse<T> {
   success: boolean;
@@ -8,31 +11,38 @@ interface ServiceResponse<T> {
 }
 
 class EntityApplicationService {
-  /**
-   * Create a new entity application
-   */
   static async createApplication(
     payload: CreateEntityApplicationInput
   ): Promise<ServiceResponse<CreateEntityApplicationResult>> {
     try {
-      // Minimal sanity checks (DB already enforces most rules)
       if (!payload.entity_type) {
         return {
           success: false,
-          message: 'Entity type is required',
+          message: "Entity type is required",
         };
       }
 
-      if (!payload.display_name || !payload.email || !payload.authorized_user_number) {
+      if (
+        !payload.display_name ||
+        !payload.email ||
+        !payload.authorized_user_number
+      ) {
         return {
           success: false,
-          message: 'Missing required fields',
+          message: "Missing required fields",
+        };
+      }
+
+      if (payload.consent !== true) {
+        return {
+          success: false,
+          message: "Consent is required to submit application",
         };
       }
 
       const result = await EntityApplicationModel.createApplication(payload);
 
-      if (result.status === 'ERROR') {
+      if (result.status === "ERROR") {
         return {
           success: false,
           message: result.message,
@@ -54,7 +64,7 @@ class EntityApplicationService {
 
       return {
         success: false,
-        message: 'Unknown service error while creating entity application',
+        message: "Unknown service error while creating entity application",
       };
     }
   }
