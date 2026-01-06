@@ -1,13 +1,23 @@
 import type { Request, Response } from 'express';
-import { ipIndiaScraperService, type ScraperResult } from './service.ts';
+import { AuthorizedUserService } from './service.ts';
+import type { ScrapeAndSaveResponse } from './service.ts';
+import type { AuthorizedUserWithCategory } from './model.ts';
 
-interface ScrapeSingleRequestBody {
+interface ScrapeRequestBody {
   applicationNumber: string;
 }
 
-interface SuccessResponse {
+interface SearchByAuthNumberBody {
+  searchValue: string;
+}
+
+interface GetByApplicationNumberParams {
+  applicationNumber?: string;
+}
+
+interface SuccessResponse<T> {
   success: true;
-  data: ScraperResult;
+  data: T;
 }
 
 interface ErrorResponse {
@@ -15,34 +25,24 @@ interface ErrorResponse {
   error: string;
 }
 
-interface HealthCheckResponse {
-  success: true;
-  message: string;
-  timestamp: string;
-}
-
-type ApiResponse = SuccessResponse | ErrorResponse | HealthCheckResponse;
+type ApiResponse<T = any> = SuccessResponse<T> | ErrorResponse;
 
 /**
- * Controller for handling IP India scraping requests
+ * Controller for handling Authorized Users operations
  */
-class ScraperController {
+class AuthorizedUserController {
   /**
-   * Scrape single application
-   * POST /api/scrape
+   * Scrape and save authorized users
+   * POST /api/authorized-users/scrape
    * Body: { applicationNumber: string }
    */
-  async scrapeApplication(req: Request, res: Response<ApiResponse>): Promise<void> {
+  async scrapeAndSave(req: Request, res: Response<ApiResponse<ScrapeAndSaveResponse>>): Promise<void> {
     try {
-      console.log('\n📨 Received scrape request');
-      console.log('Request Body:', JSON.stringify(req.body, null, 2));
-
-      const body = req.body as Partial<ScrapeSingleRequestBody>;
+      const body = req.body as Partial<ScrapeRequestBody>;
       const { applicationNumber } = body;
 
       // Validation
       if (!applicationNumber) {
-        console.error('❌ Validation Error: Application number is missing');
         res.status(400).json({
           success: false,
           error: 'Application number is required'
@@ -51,7 +51,6 @@ class ScraperController {
       }
 
       if (typeof applicationNumber !== 'string') {
-        console.error('❌ Validation Error: Application number must be a string');
         res.status(400).json({
           success: false,
           error: 'Application number must be a string'
@@ -60,7 +59,6 @@ class ScraperController {
       }
 
       if (applicationNumber.trim().length === 0) {
-        console.error('❌ Validation Error: Application number cannot be empty');
         res.status(400).json({
           success: false,
           error: 'Application number cannot be empty'
@@ -68,66 +66,125 @@ class ScraperController {
         return;
       }
 
-      console.log(`✅ Validation passed for application: ${applicationNumber}`);
-
-      // Scrape data
-      console.log('🔄 Calling scraper service...');
-      const result: ScraperResult = await ipIndiaScraperService.scrapeApplicationData(
-        applicationNumber.trim()
-      );
-
-      console.log('✅ Scraping completed successfully');
-      console.log('\n📤 Sending response to client...');
+      // Scrape and save
+      const result = await AuthorizedUserService.scrapeAndSave(applicationNumber.trim());
 
       res.status(200).json({
         success: true,
         data: result
       });
 
-      console.log('✅ Response sent successfully\n');
-
     } catch (error) {
-      console.error('\n❌ Controller Error:');
-      console.error('═══════════════════════════════════════════════════════════');
-      
-      if (error instanceof Error) {
-        console.error(`Error Message: ${error.message}`);
-        console.error(`Error Stack: ${error.stack || 'No stack trace available'}`);
-      } else {
-        console.error('Unknown error:', error);
-      }
-      
-      console.error('═══════════════════════════════════════════════════════════\n');
-
-      const errorMessage = error instanceof Error ? error.message : 'Failed to scrape data';
+      const errorMessage = error instanceof Error ? error.message : 'Failed to scrape and save data';
 
       res.status(500).json({
         success: false,
         error: errorMessage
       });
-
-      console.log('📤 Error response sent to client\n');
     }
   }
 
   /**
-   * Health check endpoint
-   * GET /api/scrape/health
+   * Get authorized user by auth number or full pattern
+   * POST /api/authorized-users/search
+   * Body: { searchValue: string }
    */
-  async healthCheck(req: Request, res: Response<HealthCheckResponse>): Promise<void> {
-    console.log('🏥 Health check requested');
-    
-    const response: HealthCheckResponse = {
-      success: true,
-      message: 'Scraper service is running',
-      timestamp: new Date().toISOString()
-    };
+  async getByAuthNumber(req: Request, res: Response<ApiResponse<AuthorizedUserWithCategory>>): Promise<void> {
+    try {
+      const body = req.body as Partial<SearchByAuthNumberBody>;
+      const { searchValue } = body;
 
-    res.status(200).json(response);
-    
-    console.log('✅ Health check response sent\n');
+      // Validation
+      if (!searchValue) {
+        res.status(400).json({
+          success: false,
+          error: 'Search value is required'
+        });
+        return;
+      }
+
+      if (typeof searchValue !== 'string') {
+        res.status(400).json({
+          success: false,
+          error: 'Search value must be a string'
+        });
+        return;
+      }
+
+      if (searchValue.trim().length === 0) {
+        res.status(400).json({
+          success: false,
+          error: 'Search value cannot be empty'
+        });
+        return;
+      }
+
+      // Search
+      const result = await AuthorizedUserService.getByAuthNumber(searchValue.trim());
+
+      res.status(200).json({
+        success: true,
+        data: result
+      });
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to find authorized user';
+
+      // Return 404 if user not found
+      const statusCode = error instanceof Error && error.message === 'Authorized user not found' ? 404 : 500;
+
+      res.status(statusCode).json({
+        success: false,
+        error: errorMessage
+      });
+    }
+  }
+
+  /**
+   * Get all authorized users for an application
+   * GET /api/authorized-users/:applicationNumber
+   */
+  async getByApplicationNumber(req: Request, res: Response<ApiResponse<any[]>>): Promise<void> {
+    try {
+      const { applicationNumber } = req.params;
+
+      // Validation
+      if (!applicationNumber) {
+        res.status(400).json({
+          success: false,
+          error: 'Application number is required'
+        });
+        return;
+      }
+
+      const appNumber = parseInt(applicationNumber);
+
+      if (isNaN(appNumber)) {
+        res.status(400).json({
+          success: false,
+          error: 'Application number must be a valid number'
+        });
+        return;
+      }
+
+      // Get users
+      const result = await AuthorizedUserService.getByApplicationNumber(appNumber);
+
+      res.status(200).json({
+        success: true,
+        data: result
+      });
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch authorized users';
+
+      res.status(500).json({
+        success: false,
+        error: errorMessage
+      });
+    }
   }
 }
 
 // Export singleton instance
-export const scraperController = new ScraperController();
+export const authorizedUserController = new AuthorizedUserController();

@@ -1,192 +1,3 @@
-// import { chromium, type Browser } from "playwright";
-
-// export interface ProductData {
-//   productId: string;
-//   imageUrl?: string;
-//   attributes: Record<string, string>;
-//   authorizedGIUser?: string;
-//   artisan?: string;
-//   invalid?: boolean;
-// }
-
-// type QueueItem = {
-//   productId: string;
-//   resolve: (data: ProductData) => void;
-//   reject: (error: Error) => void;
-// };
-
-// const queue: QueueItem[] = [];
-// let isProcessing = false;
-
-// // Simple in-memory cache
-// const cache = new Map<string, ProductData>();
-
-// export class ScraperService {
-//   async scrapeProduct(productId: string): Promise<ProductData> {
-//     const cached = cache.get(productId);
-//     if (cached) return cached;
-
-//     return new Promise<ProductData>((resolve, reject) => {
-//       queue.push({ productId, resolve, reject });
-//       this.processQueue().catch(err => {
-//         console.error("[Queue] Failed to process queue:", err);
-//       });
-//     });
-//   }
-
-//   private async processQueue(): Promise<void> {
-//     if (isProcessing) return;
-
-//     const item = queue.shift();
-//     if (!item) return;
-
-//     isProcessing = true;
-
-//     try {
-//       const result = await this.runScraper(item.productId);
-//       cache.set(item.productId, result);
-//       item.resolve(result);
-//     } catch (err) {
-//       console.error(
-//         `[ScraperService] Failed for productId=${item.productId}`,
-//         err
-//       );
-//       item.reject(err instanceof Error ? err : new Error("Scrape failed"));
-//     } finally {
-//       isProcessing = false;
-
-//       if (queue.length > 0) {
-//         this.processQueue().catch(err => {
-//           console.error("[Queue] Error continuing queue:", err);
-//         });
-//       }
-//     }
-//   }
-
-//   private async runScraper(productId: string): Promise<ProductData> {
-//     let browser: Browser | null = null;
-
-//     try {
-//       browser = await chromium.launch({ headless: true });
-//       const page = await browser.newPage();
-
-//       await page.goto("https://cdiptqccgi.com/", {
-//         timeout: 30000,
-//         waitUntil: "domcontentloaded",
-//       });
-
-//       await page.waitForSelector("input[name='qrcode']", { timeout: 10000 });
-//       await page.fill("input[name='qrcode']", productId);
-//       await page.click("#locationsubmit");
-
-//       // Wait for table OR explicit invalid message
-//       await page.waitForFunction(() => {
-//         const table = document.querySelector("table");
-//         const invalidMsg = Array.from(document.querySelectorAll("h3")).some(h =>
-//           h.textContent?.trim() === "This is not a Genuine Product !"
-//         );
-//         return table || invalidMsg;
-//       }, { timeout: 15000 });
-
-//       // Explicit invalid detection
-//       const isInvalid = await page.evaluate(() => {
-//         const headings = Array.from(document.querySelectorAll("h3"));
-//         return headings.some(h =>
-//           h.textContent?.trim() === "This is not a Genuine Product !"
-//         );
-//       });
-
-//       if (isInvalid) {
-//         return {
-//           productId,
-//           invalid: true,
-//           attributes: {},
-//         };
-//       }
-
-//       // Extract table + image
-//       const tableData = await page.evaluate(() => {
-//         const table = document.querySelector("table");
-//         if (!table) return { imageUrl: undefined, rows: [] as string[][] };
-
-//         const rows: string[][] = [];
-
-//         table.querySelectorAll("tr").forEach(tr => {
-//           const cells = Array.from(tr.querySelectorAll("th, td"))
-//             .map(td => td.textContent?.trim() ?? "")
-//             .filter(Boolean);
-
-//           if (cells.length >= 2) rows.push(cells);
-//         });
-
-//         const imageUrl =
-//           table.querySelector<HTMLImageElement>("img")?.src ?? undefined;
-
-//         return { imageUrl, rows };
-//       });
-
-//       // Empty table doesn't mean invalid
-//       if (!tableData.rows.length) {
-//         return {
-//           productId,
-//           invalid: false,
-//           attributes: {},
-//           ...(tableData.imageUrl ? { imageUrl: tableData.imageUrl } : {}),
-//         };
-//       }
-
-//       const attributes: Record<string, string> = {};
-//       let authorizedGIUser: string | undefined;
-//       let artisan: string | undefined;
-
-//       for (const row of tableData.rows) {
-//         if (row.length < 2) continue;
-
-//         const key = row[0];
-//         const value = row[1];
-
-//         if (!key || !value) continue;
-
-//         const lowerKey = key.toLowerCase();
-
-//         if (lowerKey.includes("authorized gi user")) {
-//           authorizedGIUser = value;
-//         } else if (lowerKey.includes("artisan") || lowerKey.includes("weaver")) {
-//           artisan = value;
-//         } else {
-//           attributes[key] = value;
-//         }
-//       }
-
-//       return {
-//         productId,
-//         attributes,
-//         ...(tableData.imageUrl ? { imageUrl: tableData.imageUrl } : {}),
-//         ...(authorizedGIUser ? { authorizedGIUser } : {}),
-//         ...(artisan ? { artisan } : {}),
-//         invalid: false,
-//       };
-//     } catch (err) {
-//       console.error(
-//         `[runScraper] Unexpected error for productId=${productId}`,
-//         err
-//       );
-//       throw new Error("Failed to scrape product data");
-//     } finally {
-//       if (browser) {
-//         try {
-//           await browser.close();
-//         } catch (err) {
-//           console.error("[Browser] Failed to close browser cleanly", err);
-//         }
-//       }
-//     }
-//   }
-// }
-
-
-
-
 import { chromium, type Browser, type Page } from "playwright";
 
 export interface ProductData {
@@ -224,7 +35,8 @@ const CONFIG = {
   SELECTOR_TIMEOUT: 10000,
   WAIT_UNTIL_PRIMARY: "domcontentloaded" as const,
   WAIT_UNTIL_SECONDARY: "networkidle" as const, // Try networkidle for secondary
-  USER_AGENT: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  USER_AGENT:
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 };
 
 export class ScraperService {
@@ -232,8 +44,6 @@ export class ScraperService {
    * Main entry point for scraping a product
    */
   async scrapeProduct(productId: string): Promise<ProductData> {
-    console.log(`[scrapeProduct] Received request for productId: ${productId}`);
-
     const cached = cache.get(productId);
     if (cached) {
       console.log(
@@ -243,14 +53,14 @@ export class ScraperService {
       return cached;
     }
 
-    console.log(`[scrapeProduct] Cache MISS for productId: ${productId}`);
-    console.log(`[scrapeProduct] Adding to queue. Current queue length: ${queue.length}`);
-
     return new Promise<ProductData>((resolve, reject) => {
       queue.push({ productId, resolve, reject });
       this.processQueue().catch((err: unknown) => {
         const error = err instanceof Error ? err : new Error(String(err));
-        console.error("[scrapeProduct] Failed to process queue:", error.message);
+        console.error(
+          "[scrapeProduct] Failed to process queue:",
+          error.message
+        );
       });
     });
   }
@@ -270,31 +80,14 @@ export class ScraperService {
       return;
     }
 
-    console.log(
-      `[processQueue] Starting to process productId: ${item.productId}`
-    );
-    console.log(`[processQueue] Remaining items in queue: ${queue.length}`);
-
     isProcessing = true;
 
     try {
-      console.log(
-        `[processQueue] Running scraper with fallback for: ${item.productId}`
-      );
       const result = await this.runScraperWithFallback(item.productId);
 
-      console.log(
-        `[processQueue] Scraping successful for ${item.productId}:`,
-        JSON.stringify(result, null, 2)
-      );
-
       cache.set(item.productId, result);
-      console.log(
-        `[processQueue] Cached result for ${item.productId}. Cache size: ${cache.size}`
-      );
 
       item.resolve(result);
-      console.log(`[processQueue] Resolved promise for ${item.productId}`);
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
       console.error(
@@ -303,10 +96,8 @@ export class ScraperService {
         error.stack
       );
       item.reject(error);
-      console.log(`[processQueue] Rejected promise for ${item.productId}`);
     } finally {
       isProcessing = false;
-      console.log(`[processQueue] Finished processing ${item.productId}`);
 
       if (queue.length > 0) {
         console.log(
@@ -331,17 +122,10 @@ export class ScraperService {
   private async runScraperWithFallback(
     productId: string
   ): Promise<ProductData> {
-    console.log(
-      `[runScraperWithFallback] Starting fallback scraping for: ${productId}`
-    );
-
     let primaryResult: ProductData | null = null;
     let primaryError: Error | null = null;
 
     // Try primary website first
-    console.log(
-      `[runScraperWithFallback] Attempting primary website for: ${productId}`
-    );
     try {
       primaryResult = await this.scrapePrimaryWebsite(productId);
 
@@ -356,7 +140,11 @@ export class ScraperService {
         Object.keys(primaryResult.attributes).length > 0;
 
       console.log(
-        `[runScraperWithFallback] Primary site validation - Invalid: ${primaryResult.invalid}, Attributes count: ${Object.keys(primaryResult.attributes).length}, HasValidData: ${hasValidData}`
+        `[runScraperWithFallback] Primary site validation - Invalid: ${
+          primaryResult.invalid
+        }, Attributes count: ${
+          Object.keys(primaryResult.attributes).length
+        }, HasValidData: ${hasValidData}`
       );
 
       if (hasValidData) {
@@ -381,14 +169,14 @@ export class ScraperService {
     console.log(
       `[runScraperWithFallback] Attempting secondary website for: ${productId}`
     );
-    
+
     let lastSecondaryError: Error | null = null;
     for (let attempt = 1; attempt <= CONFIG.SECONDARY_RETRIES; attempt++) {
       try {
         console.log(
           `[runScraperWithFallback] Secondary attempt ${attempt}/${CONFIG.SECONDARY_RETRIES} for ${productId}`
         );
-        
+
         const secondaryResult = await this.scrapeSecondaryWebsite(productId);
 
         console.log(
@@ -402,7 +190,11 @@ export class ScraperService {
           Object.keys(secondaryResult.attributes).length > 0;
 
         console.log(
-          `[runScraperWithFallback] Secondary site validation - Invalid: ${secondaryResult.invalid}, Attributes count: ${Object.keys(secondaryResult.attributes).length}, HasValidData: ${hasValidData}`
+          `[runScraperWithFallback] Secondary site validation - Invalid: ${
+            secondaryResult.invalid
+          }, Attributes count: ${
+            Object.keys(secondaryResult.attributes).length
+          }, HasValidData: ${hasValidData}`
         );
 
         if (hasValidData) {
@@ -438,7 +230,6 @@ export class ScraperService {
           `[runScraperWithFallback] Unexpected state: no primary result and no primary error for ${productId}`
         );
         return { ...secondaryResult, source: "secondary" as const };
-
       } catch (secondaryErr: unknown) {
         lastSecondaryError =
           secondaryErr instanceof Error
@@ -455,7 +246,7 @@ export class ScraperService {
           console.log(
             `[runScraperWithFallback] Waiting ${waitTime}ms before retry...`
           );
-          await new Promise(resolve => setTimeout(resolve, waitTime));
+          await new Promise((resolve) => setTimeout(resolve, waitTime));
         }
       }
     }
@@ -497,20 +288,18 @@ export class ScraperService {
   /**
    * Scrape from primary website (cdiptqccgi.com)
    */
-  private async scrapePrimaryWebsite(
-    productId: string
-  ): Promise<ProductData> {
+  private async scrapePrimaryWebsite(productId: string): Promise<ProductData> {
     console.log(`[scrapePrimaryWebsite] Starting for productId: ${productId}`);
 
     let browser: Browser | null = null;
 
     try {
       console.log(`[scrapePrimaryWebsite] Launching browser for ${productId}`);
-      browser = await chromium.launch({ 
+      browser = await chromium.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
       });
-      
+
       const context = await browser.newContext({
         userAgent: CONFIG.USER_AGENT,
       });
@@ -529,8 +318,8 @@ export class ScraperService {
       console.log(
         `[scrapePrimaryWebsite] Page loaded, waiting for input[name='qrcode'] for ${productId}`
       );
-      await page.waitForSelector("input[name='qrcode']", { 
-        timeout: CONFIG.SELECTOR_TIMEOUT 
+      await page.waitForSelector("input[name='qrcode']", {
+        timeout: CONFIG.SELECTOR_TIMEOUT,
       });
 
       console.log(
@@ -550,8 +339,7 @@ export class ScraperService {
         () => {
           const table = document.querySelector("table");
           const invalidMsg = Array.from(document.querySelectorAll("h3")).some(
-            (h) =>
-              h.textContent?.trim() === "This is not a Genuine Product !"
+            (h) => h.textContent?.trim() === "This is not a Genuine Product !"
           );
           return table !== null || invalidMsg;
         },
@@ -564,8 +352,7 @@ export class ScraperService {
       const isInvalid = await page.evaluate(() => {
         const headings = Array.from(document.querySelectorAll("h3"));
         return headings.some(
-          (h) =>
-            h.textContent?.trim() === "This is not a Genuine Product !"
+          (h) => h.textContent?.trim() === "This is not a Genuine Product !"
         );
       });
 
@@ -605,7 +392,11 @@ export class ScraperService {
       });
 
       console.log(
-        `[scrapePrimaryWebsite] Extracted ${tableData.rows.length} rows, imageUrl: ${tableData.imageUrl ? "present" : "absent"} for ${productId}`
+        `[scrapePrimaryWebsite] Extracted ${
+          tableData.rows.length
+        } rows, imageUrl: ${
+          tableData.imageUrl ? "present" : "absent"
+        } for ${productId}`
       );
 
       if (!tableData.rows.length) {
@@ -631,7 +422,9 @@ export class ScraperService {
       for (const row of tableData.rows) {
         if (row.length < 2) {
           console.log(
-            `[scrapePrimaryWebsite] Skipping row with insufficient cells: ${JSON.stringify(row)}`
+            `[scrapePrimaryWebsite] Skipping row with insufficient cells: ${JSON.stringify(
+              row
+            )}`
           );
           continue;
         }
@@ -641,7 +434,9 @@ export class ScraperService {
 
         if (!key || !value) {
           console.log(
-            `[scrapePrimaryWebsite] Skipping row with empty key/value: ${JSON.stringify(row)}`
+            `[scrapePrimaryWebsite] Skipping row with empty key/value: ${JSON.stringify(
+              row
+            )}`
           );
           continue;
         }
@@ -696,9 +491,7 @@ export class ScraperService {
       throw error;
     } finally {
       if (browser) {
-        console.log(
-          `[scrapePrimaryWebsite] Closing browser for ${productId}`
-        );
+        console.log(`[scrapePrimaryWebsite] Closing browser for ${productId}`);
         try {
           await browser.close();
           console.log(
@@ -728,20 +521,22 @@ export class ScraperService {
     let browser: Browser | null = null;
 
     try {
-      console.log(`[scrapeSecondaryWebsite] Launching browser for ${productId}`);
-      browser = await chromium.launch({ 
+      console.log(
+        `[scrapeSecondaryWebsite] Launching browser for ${productId}`
+      );
+      browser = await chromium.launch({
         headless: true,
         args: [
-          '--no-sandbox', 
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu'
-        ]
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-accelerated-2d-canvas",
+          "--no-first-run",
+          "--no-zygote",
+          "--disable-gpu",
+        ],
       });
-      
+
       const context = await browser.newContext({
         userAgent: CONFIG.USER_AGENT,
         viewport: { width: 1920, height: 1080 },
@@ -811,9 +606,9 @@ export class ScraperService {
       );
       await page.waitForFunction(
         () => {
-          const invalidMsg = document.querySelector(
-            "h3.text-center.mb-4"
-          )?.textContent?.trim();
+          const invalidMsg = document
+            .querySelector("h3.text-center.mb-4")
+            ?.textContent?.trim();
           const table = document.querySelector(".table-responsive table");
           return (
             invalidMsg === "This is not a Genuine Carpet !" || table !== null
@@ -872,7 +667,11 @@ export class ScraperService {
       });
 
       console.log(
-        `[scrapeSecondaryWebsite] Extracted ${tableData.rows.length} rows, imageUrl: ${tableData.imageUrl ? "present" : "absent"} for ${productId}`
+        `[scrapeSecondaryWebsite] Extracted ${
+          tableData.rows.length
+        } rows, imageUrl: ${
+          tableData.imageUrl ? "present" : "absent"
+        } for ${productId}`
       );
 
       if (!tableData.rows.length) {
@@ -898,7 +697,9 @@ export class ScraperService {
       for (const row of tableData.rows) {
         if (row.length < 2) {
           console.log(
-            `[scrapeSecondaryWebsite] Skipping row with insufficient cells: ${JSON.stringify(row)}`
+            `[scrapeSecondaryWebsite] Skipping row with insufficient cells: ${JSON.stringify(
+              row
+            )}`
           );
           continue;
         }
@@ -908,7 +709,9 @@ export class ScraperService {
 
         if (!key || !value) {
           console.log(
-            `[scrapeSecondaryWebsite] Skipping row with empty key/value: ${JSON.stringify(row)}`
+            `[scrapeSecondaryWebsite] Skipping row with empty key/value: ${JSON.stringify(
+              row
+            )}`
           );
           continue;
         }
@@ -982,3 +785,477 @@ export class ScraperService {
     }
   }
 }
+
+// import { chromium, type Browser, type Page } from "playwright";
+
+// export interface ProductData {
+//   productId: string;
+//   imageUrl?: string;
+//   attributes: Record<string, string>;
+//   authorizedGIUser?: string;
+//   artisan?: string;
+//   invalid: boolean;
+//   source: "primary" | "secondary";
+// }
+
+// type QueueItem = {
+//   productId: string;
+//   resolve: (data: ProductData) => void;
+//   reject: (error: Error) => void;
+// };
+
+// interface TableExtractionResult {
+//   imageUrl: string | undefined;
+//   rows: string[][];
+// }
+
+// const queue: QueueItem[] = [];
+// let isProcessing = false;
+// const cache = new Map<string, ProductData>();
+
+// const CONFIG = {
+//   PRIMARY_TIMEOUT: 30000,
+//   SECONDARY_TIMEOUT: 60000,
+//   SECONDARY_RETRIES: 2,
+//   SELECTOR_TIMEOUT: 10000,
+//   WAIT_UNTIL_PRIMARY: "domcontentloaded" as const,
+//   WAIT_UNTIL_SECONDARY: "networkidle" as const,
+//   USER_AGENT:
+//     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+// };
+
+// export class ScraperService {
+//   /**
+//    * Main entry point for scraping a product.
+//    * Returns cached data if available, otherwise queues the request.
+//    */
+//   async scrapeProduct(productId: string): Promise<ProductData> {
+//     const cached = cache.get(productId);
+//     if (cached) {
+//       return cached;
+//     }
+
+//     return new Promise<ProductData>((resolve, reject) => {
+//       queue.push({ productId, resolve, reject });
+//       this.processQueue().catch((err: unknown) => {
+//         const error = err instanceof Error ? err : new Error(String(err));
+//         console.error(`Failed to process queue: ${error.message}`);
+//       });
+//     });
+//   }
+
+//   /**
+//    * Process the queue one item at a time to prevent race conditions.
+//    */
+//   private async processQueue(): Promise<void> {
+//     if (isProcessing) {
+//       return;
+//     }
+
+//     const item = queue.shift();
+//     if (!item) {
+//       return;
+//     }
+
+//     isProcessing = true;
+
+//     try {
+//       const result = await this.runScraperWithFallback(item.productId);
+//       cache.set(item.productId, result);
+//       item.resolve(result);
+//     } catch (err: unknown) {
+//       const error = err instanceof Error ? err : new Error(String(err));
+//       console.error(
+//         `Scraping failed for productId=${item.productId}: ${error.message}`
+//       );
+//       item.reject(error);
+//     } finally {
+//       isProcessing = false;
+
+//       if (queue.length > 0) {
+//         this.processQueue().catch((err: unknown) => {
+//           const error = err instanceof Error ? err : new Error(String(err));
+//           console.error(`Error continuing queue: ${error.message}`);
+//         });
+//       }
+//     }
+//   }
+
+//   /**
+//    * Orchestrates fallback logic between primary and secondary websites.
+//    * Tries primary first, falls back to secondary with retries if needed.
+//    */
+//   private async runScraperWithFallback(
+//     productId: string
+//   ): Promise<ProductData> {
+//     let primaryResult: ProductData | null = null;
+//     let primaryError: Error | null = null;
+
+//     // Try primary website first
+//     try {
+//       primaryResult = await this.scrapePrimaryWebsite(productId);
+
+//       const hasValidData =
+//         !primaryResult.invalid &&
+//         Object.keys(primaryResult.attributes).length > 0;
+
+//       if (hasValidData) {
+//         return { ...primaryResult, source: "primary" as const };
+//       }
+//     } catch (err: unknown) {
+//       primaryError = err instanceof Error ? err : new Error(String(err));
+//       console.error(`Primary site failed for ${productId}: ${primaryError.message}`);
+//     }
+
+//     // Try secondary website with retries
+//     let lastSecondaryError: Error | null = null;
+
+//     for (let attempt = 1; attempt <= CONFIG.SECONDARY_RETRIES; attempt++) {
+//       try {
+//         const secondaryResult = await this.scrapeSecondaryWebsite(productId);
+
+//         const hasValidData =
+//           !secondaryResult.invalid &&
+//           Object.keys(secondaryResult.attributes).length > 0;
+
+//         if (hasValidData) {
+//           return { ...secondaryResult, source: "secondary" as const };
+//         }
+
+//         // Secondary returned invalid/empty
+//         if (primaryError) {
+//           return { ...secondaryResult, source: "secondary" as const };
+//         }
+
+//         if (primaryResult) {
+//           return { ...primaryResult, source: "primary" as const };
+//         }
+
+//         throw new Error(`No valid data from either source for ${productId}`);
+//       } catch (err: unknown) {
+//         lastSecondaryError = err instanceof Error ? err : new Error(String(err));
+
+//         if (attempt < CONFIG.SECONDARY_RETRIES) {
+//           await new Promise((resolve) => setTimeout(resolve, 2000));
+//         }
+//       }
+//     }
+
+//     // All attempts failed
+//     if (lastSecondaryError) {
+//       throw new Error(
+//         `Both sites failed for ${productId}. Primary: ${primaryError?.message ?? "N/A"}, Secondary: ${lastSecondaryError.message}`
+//       );
+//     }
+
+//     throw new Error(`Unexpected error: no result for ${productId}`);
+//   }
+
+//   /**
+//    * Scrape data from the primary website.
+//    */
+//   private async scrapePrimaryWebsite(productId: string): Promise<ProductData> {
+//     let browser: Browser | null = null;
+
+//     try {
+//       browser = await chromium.launch({
+//         headless: true,
+//         args: [
+//           "--disable-blink-features=AutomationControlled",
+//           "--disable-dev-shm-usage",
+//           "--no-sandbox",
+//           "--disable-setuid-sandbox",
+//           "--disable-web-security",
+//           "--disable-features=IsolateOrigins,site-per-process",
+//           "--disable-site-isolation-trials",
+//           "--no-first-run",
+//           "--no-zygote",
+//           "--disable-gpu",
+//         ],
+//       });
+
+//       const context = await browser.newContext({
+//         userAgent: CONFIG.USER_AGENT,
+//         viewport: { width: 1920, height: 1080 },
+//       });
+//       const page = await context.newPage();
+
+//       const targetUrl = `https://www.kcclindia.com/verify/${productId}`;
+
+//       await page.goto(targetUrl, {
+//         timeout: CONFIG.PRIMARY_TIMEOUT,
+//         waitUntil: CONFIG.WAIT_UNTIL_PRIMARY,
+//       });
+
+//       await page.waitForSelector(".table", {
+//         timeout: CONFIG.SELECTOR_TIMEOUT,
+//       });
+
+//       const isInvalid = await page.evaluate(() => {
+//         const alertBox = document.querySelector(".alert.alert-warning");
+//         if (!alertBox) return false;
+//         return alertBox.textContent?.toLowerCase().includes("invalid") ?? false;
+//       });
+
+//       if (isInvalid) {
+//         return {
+//           productId,
+//           invalid: true,
+//           attributes: {},
+//           source: "primary" as const,
+//         };
+//       }
+
+//       const tableData = await page.evaluate((): TableExtractionResult => {
+//         const table = document.querySelector(".table");
+//         if (!table) {
+//           return { imageUrl: undefined, rows: [] };
+//         }
+
+//         const rows: string[][] = [];
+//         const tbody = table.querySelector("tbody");
+
+//         if (tbody) {
+//           tbody.querySelectorAll("tr").forEach((tr) => {
+//             const cells = Array.from(tr.querySelectorAll("td"))
+//               .map((td) => td.textContent?.trim() ?? "")
+//               .filter(Boolean);
+//             if (cells.length >= 2) {
+//               rows.push(cells);
+//             }
+//           });
+//         }
+
+//         const imageUrl = table.querySelector("img")?.src ?? undefined;
+//         return { imageUrl, rows };
+//       });
+
+//       if (!tableData.rows.length) {
+//         return {
+//           productId,
+//           invalid: false,
+//           attributes: {},
+//           source: "primary" as const,
+//           ...(tableData.imageUrl ? { imageUrl: tableData.imageUrl } : {}),
+//         };
+//       }
+
+//       const attributes: Record<string, string> = {};
+//       let authorizedGIUser: string | undefined;
+//       let artisan: string | undefined;
+
+//       for (const row of tableData.rows) {
+//         if (row.length < 2) continue;
+
+//         const key = row[0];
+//         const value = row[1];
+
+//         if (!key || !value) continue;
+
+//         const lowerKey = key.toLowerCase();
+
+//         if (lowerKey.includes("authorized gi user")) {
+//           authorizedGIUser = value;
+//         } else if (lowerKey.includes("artisan") || lowerKey.includes("weaver")) {
+//           artisan = value;
+//         } else {
+//           attributes[key] = value;
+//         }
+//       }
+
+//       return {
+//         productId,
+//         attributes,
+//         invalid: false,
+//         source: "primary" as const,
+//         ...(tableData.imageUrl ? { imageUrl: tableData.imageUrl } : {}),
+//         ...(authorizedGIUser ? { authorizedGIUser } : {}),
+//         ...(artisan ? { artisan } : {}),
+//       };
+//     } catch (err: unknown) {
+//       const error = err instanceof Error ? err : new Error(String(err));
+//       throw new Error(`Primary scraping failed: ${error.message}`);
+//     } finally {
+//       if (browser) {
+//         try {
+//           await browser.close();
+//         } catch (err: unknown) {
+//           const error = err instanceof Error ? err : new Error(String(err));
+//           console.error(`Failed to close browser: ${error.message}`);
+//         }
+//       }
+//     }
+//   }
+
+//   /**
+//    * Scrape data from the secondary website.
+//    */
+//   private async scrapeSecondaryWebsite(
+//     productId: string
+//   ): Promise<ProductData> {
+//     let browser: Browser | null = null;
+
+//     try {
+//       browser = await chromium.launch({
+//         headless: true,
+//         args: [
+//           "--disable-blink-features=AutomationControlled",
+//           "--disable-dev-shm-usage",
+//           "--no-sandbox",
+//           "--disable-setuid-sandbox",
+//           "--disable-web-security",
+//           "--disable-features=IsolateOrigins,site-per-process",
+//           "--disable-site-isolation-trials",
+//           "--no-first-run",
+//           "--no-zygote",
+//           "--disable-gpu",
+//         ],
+//       });
+
+//       const context = await browser.newContext({
+//         userAgent: CONFIG.USER_AGENT,
+//         viewport: { width: 1920, height: 1080 },
+//       });
+//       const page = await context.newPage();
+
+//       const targetUrl = "https://iictsrinagarcarpet-gi.org/";
+
+//       try {
+//         await page.goto(targetUrl, {
+//           timeout: CONFIG.SECONDARY_TIMEOUT,
+//           waitUntil: CONFIG.WAIT_UNTIL_SECONDARY,
+//         });
+//       } catch (gotoErr: unknown) {
+//         // Fallback to domcontentloaded if networkidle fails
+//         await page.goto(targetUrl, {
+//           timeout: CONFIG.SECONDARY_TIMEOUT,
+//           waitUntil: "domcontentloaded",
+//         });
+//       }
+
+//       await page.waitForSelector(".featured-content #verifyform", {
+//         timeout: CONFIG.SELECTOR_TIMEOUT,
+//       });
+
+//       // Fill the input field
+//       const inputExists = await page.$("#verifyform input[type='text']");
+
+//       if (inputExists) {
+//         await page.fill("#verifyform input[type='text']", productId);
+//       } else {
+//         await page.fill("#verifyform input", productId);
+//       }
+
+//       await page.click("#locationsubmit");
+
+//       // Wait for either the invalid message or the table to appear
+//       await page.waitForFunction(
+//         () => {
+//           const invalidMsg = document.querySelector(
+//             "h3.text-center.mb-4"
+//           )?.textContent?.trim();
+//           const table = document.querySelector(".table-responsive table");
+//           return (
+//             invalidMsg === "This is not a Genuine Carpet !" || table !== null
+//           );
+//         },
+//         { timeout: 15000 }
+//       );
+
+//       const isInvalid = await page.evaluate(() => {
+//         const heading = document.querySelector("h3.text-center.mb-4");
+//         return (
+//           heading?.textContent?.trim() === "This is not a Genuine Carpet !"
+//         );
+//       });
+
+//       if (isInvalid) {
+//         return {
+//           productId,
+//           invalid: true,
+//           attributes: {},
+//           source: "secondary" as const,
+//         };
+//       }
+
+//       const tableData = await page.evaluate((): TableExtractionResult => {
+//         const table = document.querySelector(".table-responsive table");
+//         if (!table) {
+//           return { imageUrl: undefined, rows: [] };
+//         }
+
+//         const rows: string[][] = [];
+//         const tbody = table.querySelector("tbody");
+
+//         if (tbody) {
+//           tbody.querySelectorAll("tr").forEach((tr) => {
+//             const cells = Array.from(tr.querySelectorAll("td"))
+//               .map((td) => td.textContent?.trim() ?? "")
+//               .filter(Boolean);
+//             if (cells.length >= 2) {
+//               rows.push(cells);
+//             }
+//           });
+//         }
+
+//         const imageUrl = table.querySelector("img")?.src ?? undefined;
+//         return { imageUrl, rows };
+//       });
+
+//       if (!tableData.rows.length) {
+//         return {
+//           productId,
+//           invalid: false,
+//           attributes: {},
+//           source: "secondary" as const,
+//           ...(tableData.imageUrl ? { imageUrl: tableData.imageUrl } : {}),
+//         };
+//       }
+
+//       const attributes: Record<string, string> = {};
+//       let authorizedGIUser: string | undefined;
+//       let artisan: string | undefined;
+
+//       for (const row of tableData.rows) {
+//         if (row.length < 2) continue;
+
+//         const key = row[0];
+//         const value = row[1];
+
+//         if (!key || !value) continue;
+
+//         const lowerKey = key.toLowerCase();
+
+//         if (lowerKey.includes("authorized gi user")) {
+//           authorizedGIUser = value;
+//         } else if (lowerKey.includes("artisan") || lowerKey.includes("weaver")) {
+//           artisan = value;
+//         } else {
+//           attributes[key] = value;
+//         }
+//       }
+
+//       return {
+//         productId,
+//         attributes,
+//         invalid: false,
+//         source: "secondary" as const,
+//         ...(tableData.imageUrl ? { imageUrl: tableData.imageUrl } : {}),
+//         ...(authorizedGIUser ? { authorizedGIUser } : {}),
+//         ...(artisan ? { artisan } : {}),
+//       };
+//     } catch (err: unknown) {
+//       const error = err instanceof Error ? err : new Error(String(err));
+//       throw new Error(`Secondary scraping failed: ${error.message}`);
+//     } finally {
+//       if (browser) {
+//         try {
+//           await browser.close();
+//         } catch (err: unknown) {
+//           const error = err instanceof Error ? err : new Error(String(err));
+//           console.error(`Failed to close browser: ${error.message}`);
+//         }
+//       }
+//     }
+//   }
+// }

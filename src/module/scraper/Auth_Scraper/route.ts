@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { scraperController } from "./controller.ts";
+import { authorizedUserController } from "./controller.ts";
 
 const router = Router();
 
-router.post("/", scraperController.scrapeApplication.bind(scraperController));
-router.get("/health", scraperController.healthCheck.bind(scraperController));
+router.post("/scrape", authorizedUserController.scrapeAndSave.bind(authorizedUserController));
+router.post("/search", authorizedUserController.getByAuthNumber.bind(authorizedUserController));
+router.get("/:applicationNumber", authorizedUserController.getByApplicationNumber.bind(authorizedUserController));
 
 export default router;
