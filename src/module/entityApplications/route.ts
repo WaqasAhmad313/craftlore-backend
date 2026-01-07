@@ -1,8 +1,11 @@
-import { Router } from 'express';
-import EntityApplicationController from './controller.ts';
+import { Router } from "express";
+import CraftEntityController from "./controller.ts";
 
-const router: Router = Router();
+const router = Router();
 
-router.post('/', EntityApplicationController.createApplication);
+router.post("/", CraftEntityController.create);
+router.get("/", CraftEntityController.getAll);
+router.get("/:id", CraftEntityController.getById);
+router.patch("/status", CraftEntityController.updateStatus);
 
 export default router;

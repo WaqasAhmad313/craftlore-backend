@@ -1,73 +1,78 @@
-import EntityApplicationModel from "./model.ts";
+import CraftEntityModel from "./model.ts";
 import type {
-  CreateEntityApplicationInput,
-  CreateEntityApplicationResult,
+  CreateCraftEntityInput,
+  CreateCraftEntityResult,
+  CraftEntity,
+  EntityStatus,
 } from "./model.ts";
 
-interface ServiceResponse<T> {
-  success: boolean;
-  data?: T;
-  message?: string;
-}
-
-class EntityApplicationService {
-  static async createApplication(
-    payload: CreateEntityApplicationInput
-  ): Promise<ServiceResponse<CreateEntityApplicationResult>> {
-    try {
-      if (!payload.entity_type) {
-        return {
-          success: false,
-          message: "Entity type is required",
-        };
-      }
-
-      if (
-        !payload.display_name ||
-        !payload.email ||
-        !payload.authorized_user_number
-      ) {
-        return {
-          success: false,
-          message: "Missing required fields",
-        };
-      }
-
-      if (payload.consent !== true) {
-        return {
-          success: false,
-          message: "Consent is required to submit application",
-        };
-      }
-
-      const result = await EntityApplicationModel.createApplication(payload);
-
-      if (result.status === "ERROR") {
-        return {
-          success: false,
-          message: result.message,
-        };
-      }
-
+class CraftEntityService {
+  static async createEntity(
+    payload: CreateCraftEntityInput
+  ): Promise<CreateCraftEntityResult> {
+    // Basic business validations (DB already enforces more)
+    if (!payload.consent) {
       return {
-        success: true,
-        data: result,
-        message: result.message,
-      };
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return {
-          success: false,
-          message: error.message,
-        };
-      }
-
-      return {
-        success: false,
-        message: "Unknown service error while creating entity application",
+        id: null,
+        reference_id: null,
+        status: "ERROR",
+        message: "Consent is required to create entity",
       };
     }
+
+    if (!payload.name?.trim()) {
+      return {
+        id: null,
+        reference_id: null,
+        status: "ERROR",
+        message: "Entity name is required",
+      };
+    }
+
+    if (!payload.contact || Object.keys(payload.contact).length === 0) {
+      return {
+        id: null,
+        reference_id: null,
+        status: "ERROR",
+        message: "Contact information is required",
+      };
+    }
+
+    return CraftEntityModel.create(payload);
+  }
+
+  static async getEntityById(id: string): Promise<CraftEntity | null> {
+    if (!id) {
+      throw new Error("Entity ID is required");
+    }
+
+    const entity = await CraftEntityModel.getById(id);
+
+    if (!entity) {
+      return null;
+    }
+
+    return entity;
+  }
+
+  static async getAllEntities(status?: EntityStatus): Promise<CraftEntity[]> {
+    return CraftEntityModel.getAll(status);
+  }
+
+  static async updateEntityStatus(
+    referenceId: string,
+    newStatus: EntityStatus
+  ) {
+    if (!referenceId) {
+      throw new Error("Reference ID is required");
+    }
+
+    if (!["pending", "verified", "blocked"].includes(newStatus)) {
+      throw new Error("Invalid status value");
+    }
+
+    return CraftEntityModel.updateStatus(referenceId, newStatus);
   }
 }
 
-export default EntityApplicationService;
+export default CraftEntityService;
