@@ -78,12 +78,12 @@ class CraftEntityModel {
       payload.trading_as ?? null,
       payload.description ?? null,
       payload.category ?? null,
-      payload.identifiers ?? null,
-      payload.address ?? null,
-      payload.contact,
-      payload.craft_specializations ?? null,
-      payload.export_markets ?? null,
-      payload.banking_info ?? null,
+      payload.identifiers ? JSON.stringify(payload.identifiers) : null,
+      payload.address ? JSON.stringify(payload.address) : null,
+      JSON.stringify(payload.contact),
+      payload.craft_specializations ? JSON.stringify(payload.craft_specializations) : null,
+      payload.export_markets ? JSON.stringify(payload.export_markets) : null,
+      payload.banking_info ? JSON.stringify(payload.banking_info) : null,
       payload.number_of_employees ?? null,
       payload.year_in_business ?? null,
       payload.annual_turnover ?? null,
@@ -129,12 +129,12 @@ class CraftEntityModel {
     return result.rows;
   }
 
-  static async updateStatus(referenceId: string, newStatus: EntityStatus) {
+  static async updateStatus(id: string, newStatus: EntityStatus) {
     const query = `
-      SELECT * FROM update_craft_entity_status($1, $2)
+      SELECT * FROM update_craft_entity_status($1::uuid, $2)
     `;
 
-    const result = await db.query(query, [referenceId, newStatus]);
+    const result = await db.query(query, [id, newStatus]);
 
     if (result.rows.length === 0) {
       throw new Error("No response returned from update_craft_entity_status");

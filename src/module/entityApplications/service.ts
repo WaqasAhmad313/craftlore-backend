@@ -60,18 +60,18 @@ class CraftEntityService {
   }
 
   static async updateEntityStatus(
-    referenceId: string,
+    id: string,
     newStatus: EntityStatus
   ) {
-    if (!referenceId) {
-      throw new Error("Reference ID is required");
+    if (!id) {
+      throw new Error("Entity ID is required");
     }
 
     if (!["pending", "verified", "blocked"].includes(newStatus)) {
       throw new Error("Invalid status value");
     }
 
-    return CraftEntityModel.updateStatus(referenceId, newStatus);
+    return CraftEntityModel.updateStatus(id, newStatus);
   }
 }
 

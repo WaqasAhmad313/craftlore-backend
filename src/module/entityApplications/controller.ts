@@ -78,20 +78,20 @@ class CraftEntityController {
     next: NextFunction
   ): Promise<void> {
     try {
-      const { reference_id, status } = req.body as {
-        reference_id?: string;
+      const { id, status } = req.body as {
+        id?: string;
         status?: EntityStatus;
       };
 
-      if (!reference_id || !status) {
+      if (!id || !status) {
         res.status(400).json({
-          message: "reference_id and status are required",
+          message: "id and status are required",
         });
         return;
       }
 
       const result = await CraftEntityService.updateEntityStatus(
-        reference_id,
+        id,
         status
       );
 
