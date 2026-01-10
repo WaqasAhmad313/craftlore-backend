@@ -1,7 +1,7 @@
 import { db } from "../../config/db.ts";
 
 export type EntityType = "ARTISAN" | "BUSINESS" | "INSTITUTION_NGO";
-export type EntityStatus = "pending" | "verified" | "blocked";
+export type EntityStatus = "pending" | "verified" | "blocked" | "rejected" | "registered";
 
 export interface CreateCraftEntityInput {
   entity_type: EntityType;
@@ -20,9 +20,10 @@ export interface CreateCraftEntityInput {
 
   number_of_employees?: number | null;
   year_in_business?: number | null;
-  annual_turnover?: number | null;
+  annual_turnover?: string | null;
 
   consent: boolean;
+  status: EntityStatus;
 }
 
 export interface CreateCraftEntityResult {
@@ -43,7 +44,7 @@ export interface CraftEntity {
   status: EntityStatus;
   is_active: boolean;
 
-  number_of_employees: number | null;
+  number_of_employees: string | null;
   year_in_business: number | null;
   annual_turnover: string | null;
 
@@ -59,6 +60,96 @@ export interface CraftEntity {
   updated_at: string;
 }
 
+// Entity with evaluation scores for admin dashboard DETAIL VIEW
+export interface CraftEntityWithEvaluation {
+  id: string;
+  reference_id: string;
+  entity_type: EntityType;
+  name: string;
+  trading_as: string | null;
+  description: string | null;
+  category: string | null;
+  status: EntityStatus;
+  is_active: boolean;
+
+  // From identifiers JSONB
+  owner_name: string | null;
+  gst_number: string | null;
+  pan_number: string | null;
+
+  // From address JSONB
+  district: string | null;
+  full_address: string | null;
+
+  // From contact JSONB
+  contact_email: string | null;
+  contact_phone: string | null;
+  contact_website: string | null;
+
+  craft_specializations: unknown[] | null;
+
+  // From craft_entity_evaluations table
+  quality_score: number | null;
+  ethics_score: number | null;
+  satisfaction_score: number | null;
+  authenticity_score: number | null;
+  evaluation_notes: string | null;
+
+  created_at: string;
+}
+
+// Simplified interface for table listing (only what's shown in table)
+export interface CraftEntityTableView {
+  id: string;
+  reference_id: string;
+  entity_type: EntityType;
+  name: string;
+  status: EntityStatus;
+  owner_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  trust_score: number;  // Calculated average from evaluation scores
+  created_at: string;
+}
+
+// Lightweight interface for listing entities (only required fields)
+export interface CraftEntityListing {
+  name: string;
+  reference_id: string;
+  description: string | null;
+  category: string | null;
+  address: Record<string, unknown> | null;
+  craft_specializations: unknown[] | null;
+  created_at: string;
+}
+
+// Query filters interface
+export interface GetAllEntitiesFilters {
+  search?: string;
+  entity_type?: EntityType | 'all';
+  status?: EntityStatus | 'all';
+  page?: number;
+  limit?: number;
+}
+
+// Paginated response
+export interface PaginatedEntitiesResponse {
+  entities: CraftEntityTableView[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
+// Update status result
+export interface UpdateStatusResult {
+  id: string;
+  status: string;
+  updated_at: string;
+}
+
 class CraftEntityModel {
   static async create(
     payload: CreateCraftEntityInput
@@ -68,7 +159,7 @@ class CraftEntityModel {
         $1, $2, $3, $4, $5,
         $6::jsonb, $7::jsonb, $8::jsonb,
         $9::jsonb, $10::jsonb, $11::jsonb,
-        $12, $13, $14, $15
+        $12, $13, $14, $15, $16
       )
     `;
 
@@ -88,6 +179,7 @@ class CraftEntityModel {
       payload.year_in_business ?? null,
       payload.annual_turnover ?? null,
       payload.consent,
+      payload.status,
     ];
 
     try {
@@ -118,29 +210,182 @@ class CraftEntityModel {
     return result.rows[0] ?? null;
   }
 
-  static async getAll(status?: EntityStatus): Promise<CraftEntity[]> {
-    const query = status
-      ? `SELECT * FROM craft_entities WHERE status = $1 ORDER BY created_at DESC`
-      : `SELECT * FROM craft_entities ORDER BY created_at DESC`;
-
-    const values = status ? [status] : [];
-    const result = await db.query<CraftEntity>(query, values);
-
-    return result.rows;
-  }
-
-  static async updateStatus(id: string, newStatus: EntityStatus) {
+  static async getByIdWithEvaluation(id: string): Promise<CraftEntityWithEvaluation | null> {
     const query = `
-      SELECT * FROM update_craft_entity_status($1::uuid, $2)
+      SELECT 
+        ce.id,
+        ce.reference_id,
+        ce.entity_type,
+        ce.name,
+        ce.trading_as,
+        ce.description,
+        ce.category,
+        ce.status,
+        ce.is_active,
+        
+        -- Extract from identifiers JSONB
+        ce.identifiers->>'owner_name' as owner_name,
+        ce.identifiers->>'gst_number' as gst_number,
+        ce.identifiers->>'pan_number' as pan_number,
+        
+        -- Extract from address JSONB
+        ce.address->>'district' as district,
+        ce.address->>'full_address' as full_address,
+        
+        -- Extract from contact JSONB
+        ce.contact->>'email' as contact_email,
+        ce.contact->>'phone' as contact_phone,
+        ce.contact->>'website' as contact_website,
+        
+        ce.craft_specializations,
+        
+        -- From evaluations table
+        cee.quality_score,
+        cee.ethics_score,
+        cee.satisfaction_score,
+        cee.authenticity_score,
+        cee.notes as evaluation_notes,
+        cee.reviews,
+        
+        ce.created_at
+      FROM craft_entities ce
+      LEFT JOIN craft_entity_evaluations cee ON ce.id = cee.craft_entity_id
+      WHERE ce.id = $1
+      LIMIT 1
     `;
 
-    const result = await db.query(query, [id, newStatus]);
+    const result = await db.query<CraftEntityWithEvaluation>(query, [id]);
+    return result.rows[0] ?? null;
+  }
 
-    if (result.rows.length === 0) {
-      throw new Error("No response returned from update_craft_entity_status");
+  static async getAll(
+    filters?: GetAllEntitiesFilters
+  ): Promise<PaginatedEntitiesResponse> {
+    const {
+      search,
+      entity_type,
+      status,
+      page = 1,
+      limit = 10
+    } = filters || {};
+
+    const offset = (page - 1) * limit;
+
+    // Build WHERE conditions
+    const conditions: string[] = [];
+    const values: any[] = [];
+    let paramCount = 1;
+
+    // Search filter (search in name, owner_name, email)
+    if (search && search.trim() !== '') {
+      conditions.push(`(
+        ce.name ILIKE $${paramCount} OR
+        ce.identifiers->>'owner_name' ILIKE $${paramCount} OR
+        ce.contact->>'email' ILIKE $${paramCount}
+      )`);
+      values.push(`%${search}%`);
+      paramCount++;
     }
 
-    return result.rows[0];
+    // Entity type filter
+    if (entity_type && entity_type !== 'all') {
+      conditions.push(`ce.entity_type = $${paramCount}`);
+      values.push(entity_type);
+      paramCount++;
+    }
+
+    // Status filter
+    if (status && status !== 'all') {
+      conditions.push(`ce.status = $${paramCount}`);
+      values.push(status);
+      paramCount++;
+    }
+
+    const whereClause = conditions.length > 0 
+      ? `WHERE ${conditions.join(' AND ')}` 
+      : '';
+
+    // Count total records
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM craft_entities ce
+      ${whereClause}
+    `;
+
+    const countResult = await db.query<{ total: string }>(countQuery, values);
+    const total = parseInt(countResult.rows[0]?.total || '0');
+
+    // Get entities - ONLY FIELDS FOR TABLE VIEW
+    const entitiesQuery = `
+      SELECT 
+        ce.id,
+        ce.reference_id,
+        ce.entity_type,
+        ce.name,
+        ce.status,
+        
+        -- Only basic info for table
+        ce.identifiers->>'owner_name' as owner_name,
+        ce.contact->>'email' as contact_email,
+        ce.contact->>'phone' as contact_phone,
+        
+        -- Average score from evaluations (for trust score display)
+        COALESCE(
+          (cee.quality_score + cee.ethics_score + cee.satisfaction_score + cee.authenticity_score) / 4.0,
+          0
+        ) as trust_score,
+        
+        ce.created_at
+      FROM craft_entities ce
+      LEFT JOIN craft_entity_evaluations cee ON ce.id = cee.craft_entity_id
+      ${whereClause}
+      ORDER BY ce.created_at DESC
+      LIMIT $${paramCount} OFFSET $${paramCount + 1}
+    `;
+
+    values.push(limit, offset);
+
+    const result = await db.query<CraftEntityTableView>(entitiesQuery, values);
+
+    return {
+      entities: result.rows,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
+  }
+
+  static async updateStatus(id: string, newStatus: EntityStatus): Promise<UpdateStatusResult> {
+    const query = `
+      UPDATE craft_entities
+      SET 
+        status = $2,
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING id, status, updated_at
+    `;
+
+    const result = await db.query<UpdateStatusResult>(query, [id, newStatus]);
+
+    if (result.rows.length === 0) {
+      throw new Error("Entity not found or update failed");
+    }
+
+    return result.rows[0]!;
+  }
+
+  static async delete(id: string): Promise<boolean> {
+    const query = `
+      DELETE FROM craft_entities
+      WHERE id = $1
+      RETURNING id
+    `;
+
+    const result = await db.query(query, [id]);
+    return result.rows.length > 0;
   }
 }
 
