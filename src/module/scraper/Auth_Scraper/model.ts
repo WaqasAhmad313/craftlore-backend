@@ -88,7 +88,8 @@ export class AuthorizedUserModel {
       SELECT 
         au.authorized_user_name as "authorizedUserName",
         au.authorized_user_address as "authorizedUserAddress",
-        gp.category
+        gp.category,
+        gp.name as "productName"
       FROM authorized_users au
       INNER JOIN gi_products gp ON au.gi_application_number = gp.gi_application_number
       WHERE 

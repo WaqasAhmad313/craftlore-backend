@@ -9,7 +9,7 @@ export interface CreateCraftEntityInput {
   trading_as?: string | null;
   description?: string | null;
   category?: string | null;
-
+  products?: unknown[] | null;
   identifiers?: Record<string, unknown> | null;
   address?: Record<string, unknown> | null;
   contact: Record<string, unknown>;
@@ -104,11 +104,15 @@ export interface CraftEntityTableView {
   reference_id: string;
   entity_type: EntityType;
   name: string;
+  trading_as: string | null;
   status: EntityStatus;
   owner_name: string | null;
   contact_email: string | null;
   contact_phone: string | null;
-  trust_score: number;  // Calculated average from evaluation scores
+  trust_score: number;
+  year_in_business: number | null;
+  craft_specializations: unknown[] | null;
+  featured: boolean;  // Hardcoded to true for now (until column added)
   created_at: string;
 }
 
@@ -159,7 +163,8 @@ class CraftEntityModel {
         $1, $2, $3, $4, $5,
         $6::jsonb, $7::jsonb, $8::jsonb,
         $9::jsonb, $10::jsonb, $11::jsonb,
-        $12, $13, $14, $15, $16
+        $12::jsonb,
+        $13, $14, $15, $16, $17
       )
     `;
 
@@ -169,6 +174,7 @@ class CraftEntityModel {
       payload.trading_as ?? null,
       payload.description ?? null,
       payload.category ?? null,
+      payload.products ? JSON.stringify(payload.products) : null,
       payload.identifiers ? JSON.stringify(payload.identifiers) : null,
       payload.address ? JSON.stringify(payload.address) : null,
       JSON.stringify(payload.contact),
@@ -245,7 +251,6 @@ class CraftEntityModel {
         cee.satisfaction_score,
         cee.authenticity_score,
         cee.notes as evaluation_notes,
-        cee.reviews,
         
         ce.created_at
       FROM craft_entities ce
@@ -315,19 +320,25 @@ class CraftEntityModel {
     const countResult = await db.query<{ total: string }>(countQuery, values);
     const total = parseInt(countResult.rows[0]?.total || '0');
 
-    // Get entities - ONLY FIELDS FOR TABLE VIEW
+    // Get entities - NOW WITH REQUIRED FIELDS FOR TRADE REGISTRY
     const entitiesQuery = `
       SELECT 
         ce.id,
         ce.reference_id,
         ce.entity_type,
         ce.name,
+        ce.trading_as,
         ce.status,
         
-        -- Only basic info for table
+        -- Basic info for table
         ce.identifiers->>'owner_name' as owner_name,
         ce.contact->>'email' as contact_email,
         ce.contact->>'phone' as contact_phone,
+        
+        -- Trade Registry specific fields
+        ce.year_in_business,
+        ce.craft_specializations,
+        true as featured,  -- Hardcoded to true for now
         
         -- Average score from evaluations (for trust score display)
         COALESCE(
