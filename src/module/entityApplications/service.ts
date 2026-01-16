@@ -4,7 +4,6 @@ import type {
   CreateCraftEntityResult,
   CraftEntity,
   CraftEntityWithEvaluation,
-  CraftEntityTableView,
   EntityStatus,
   EntityType,
   GetAllEntitiesFilters,

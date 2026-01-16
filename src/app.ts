@@ -11,21 +11,28 @@ import heroRoutes from "./module/hero/route.ts";
 import authScrape from "./module/scraper/Auth_Scraper/route.ts";
 import blacklist from "./module/blocklist/route.ts";
 import evaluation from "./module/evaluation/route.ts"
+import course from "./module/courses/route.ts";
+import authRoute from "./module/auth/route.ts";
+import cookieParser from 'cookie-parser';
 
 const app: Application = express();
 
 app.use(morgan("dev"));
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: process.env.FRONTEND_URL,
+    credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allowedHeaders: ["Content-Type"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
 app.use(express.json());
+app.use(cookieParser());
 app.use("/api/auth-scrape", authScrape);
+app.use("/api/courses", course);
 app.use("/api/evaluations", evaluation);
+app.use("/api/auth", authRoute);
 app.use("/api/blacklist", blacklist);
 app.use("/api", counterfeitReportRoutes);
 app.use("/api/heroes", heroRoutes);
