@@ -199,7 +199,12 @@ export class AuthService {
     };
 
     const qs = new URLSearchParams(options);
-    return `${rootUrl}?${qs.toString()}`;
+    const authUrl = `${rootUrl}?${qs.toString()}`;
+
+    console.log("🔍 Google Auth URL:", authUrl);
+    console.log("🔍 Redirect URI:", `${env.APP_URL}/api/auth/google/callback`);
+
+    return authUrl;
   }
 
   static async handleGoogleCallback(

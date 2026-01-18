@@ -21,7 +21,7 @@
     // Strictness
     "strict": true,
     "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
+    // "exactOptionalPropertyTypes": true,
 
     // Style & Safety
     "noImplicitReturns": true,

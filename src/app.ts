@@ -14,6 +14,7 @@ import evaluation from "./module/evaluation/route.ts"
 import course from "./module/courses/route.ts";
 import authRoute from "./module/auth/route.ts";
 import cookieParser from 'cookie-parser';
+import clieRoute from "./module/clie/route.ts";
 
 const app: Application = express();
 
@@ -30,6 +31,7 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 app.use("/api/auth-scrape", authScrape);
+app.use("/api/clie", clieRoute);
 app.use("/api/courses", course);
 app.use("/api/evaluations", evaluation);
 app.use("/api/auth", authRoute);
