@@ -1,9 +1,5 @@
 import { db } from "../../config/db.ts";
 
-/* =========================
-   Interfaces
-========================= */
-
 export interface User {
   id: string;
   name: string;
@@ -32,23 +28,18 @@ export interface EmailVerificationCode {
   created_at: Date;
 }
 
-/* =========================
-   User Model
-========================= */
-
 export class UserModel {
   static async findById(id: string): Promise<User | null> {
-    const result = await db.query(
-      `SELECT * FROM users WHERE id = $1 LIMIT 1`,
-      [id]
-    );
+    const result = await db.query(`SELECT * FROM users WHERE id = $1 LIMIT 1`, [
+      id,
+    ]);
     return result.rows[0] ?? null;
   }
 
   static async findByEmail(email: string): Promise<User | null> {
     const result = await db.query(
       `SELECT * FROM users WHERE email = $1 LIMIT 1`,
-      [email]
+      [email],
     );
     return result.rows[0] ?? null;
   }
@@ -56,7 +47,15 @@ export class UserModel {
   static async findByGoogleId(googleId: string): Promise<User | null> {
     const result = await db.query(
       `SELECT * FROM users WHERE google_id = $1 LIMIT 1`,
-      [googleId]
+      [googleId],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  static async findAdminByEmail(email: string): Promise<User | null> {
+    const result = await db.query(
+      `SELECT * FROM users WHERE email = $1 AND role = 'admin' LIMIT 1`,
+      [email],
     );
     return result.rows[0] ?? null;
   }
@@ -81,7 +80,7 @@ export class UserModel {
         data.google_id ?? null,
         data.email_verified,
         data.role ?? "user",
-      ]
+      ],
     );
     return result.rows[0];
   }
@@ -95,7 +94,7 @@ export class UserModel {
       google_id?: string | null;
       email_verified?: boolean;
       role?: "user" | "admin";
-    }>
+    }>,
   ): Promise<User | null> {
     const fields: string[] = [];
     const values: any[] = [];
@@ -116,28 +115,24 @@ export class UserModel {
        SET ${fields.join(", ")}, updated_at = now()
        WHERE id = $${index}
        RETURNING *`,
-      values
+      values,
     );
 
     return result.rows[0] ?? null;
   }
 }
 
-/* =========================
-   Refresh Token Model
-========================= */
-
 export class RefreshTokenModel {
   static async create(
     userId: string,
     token: string,
-    expiresAt: Date
+    expiresAt: Date,
   ): Promise<RefreshToken> {
     const result = await db.query(
       `INSERT INTO refresh_tokens (user_id, token, expires_at)
        VALUES ($1, $2, $3)
        RETURNING *`,
-      [userId, token, expiresAt]
+      [userId, token, expiresAt],
     );
     return result.rows[0];
   }
@@ -145,7 +140,7 @@ export class RefreshTokenModel {
   static async find(token: string): Promise<RefreshToken | null> {
     const result = await db.query(
       `SELECT * FROM refresh_tokens WHERE token = $1 LIMIT 1`,
-      [token]
+      [token],
     );
     return result.rows[0] ?? null;
   }
@@ -159,28 +154,24 @@ export class RefreshTokenModel {
   }
 }
 
-/* =========================
-   Email Verification Model
-========================= */
-
 export class EmailVerificationModel {
   static async create(
     userId: string,
     codeHash: string,
-    expiresAt: Date
+    expiresAt: Date,
   ): Promise<EmailVerificationCode> {
     const result = await db.query(
       `INSERT INTO email_verification_codes
        (user_id, code_hash, expires_at)
        VALUES ($1, $2, $3)
        RETURNING *`,
-      [userId, codeHash, expiresAt]
+      [userId, codeHash, expiresAt],
     );
     return result.rows[0];
   }
 
   static async findLatest(
-    userId: string
+    userId: string,
   ): Promise<EmailVerificationCode | null> {
     const result = await db.query(
       `SELECT *
@@ -188,15 +179,14 @@ export class EmailVerificationModel {
        WHERE user_id = $1
        ORDER BY created_at DESC
        LIMIT 1`,
-      [userId]
+      [userId],
     );
     return result.rows[0] ?? null;
   }
 
   static async deleteByUser(userId: string): Promise<void> {
-    await db.query(
-      `DELETE FROM email_verification_codes WHERE user_id = $1`,
-      [userId]
-    );
+    await db.query(`DELETE FROM email_verification_codes WHERE user_id = $1`, [
+      userId,
+    ]);
   }
 }

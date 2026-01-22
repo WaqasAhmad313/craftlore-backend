@@ -27,22 +27,13 @@ export interface LoginData {
 }
 
 export class AuthService {
-  private static CODE_EXPIRY_MINUTES = 10; // code valid for 10 minutes
-
-  /* -------------------------
-     Email Signup
-  ------------------------- */
+  private static CODE_EXPIRY_MINUTES = 10;
   static async signupWithEmail(data: SignupData): Promise<User> {
-    // check if user exists
     const existing = await UserModel.findByEmail(data.email);
     if (existing) {
       throw new Error("Email already registered");
     }
-
-    // hash password
     const passwordHash = await hashPassword(data.password);
-
-    // create user with email_verified=false
     const user = await UserModel.create({
       name: data.name,
       email: data.email,
@@ -51,17 +42,13 @@ export class AuthService {
       role: "user",
     });
 
-    // generate verification code
     const code = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
     const codeHash = await hashCode(code);
     const expiresAt = new Date(
-      Date.now() + this.CODE_EXPIRY_MINUTES * 60 * 1000
+      Date.now() + this.CODE_EXPIRY_MINUTES * 60 * 1000,
     );
 
-    // save code in DB
     await EmailVerificationModel.create(user.id, codeHash, expiresAt);
-
-    // send email
     try {
       await Mailer.sendEmailVerification(user.email!, code, user.name);
     } catch (err) {
@@ -74,9 +61,29 @@ export class AuthService {
     return user;
   }
 
-  /* -------------------------
-     Verify Email Code
-  ------------------------- */
+  static async loginAdmin(
+    data: LoginData,
+  ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
+    // Only fetch admins
+    const user = await UserModel.findAdminByEmail(data.email);
+    if (!user) throw new Error("Invalid credentials");
+
+    if (!user.password_hash) throw new Error("Invalid credentials");
+
+    const match = await comparePassword(data.password, user.password_hash);
+    if (!match) throw new Error("Invalid credentials");
+
+    // Issue tokens with admin role inside JWT
+    const accessToken = generateAccessToken({ sub: user.id, role: user.role });
+    const refreshTokenStr = generateRefreshToken({ sub: user.id });
+
+    const refreshExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    await RefreshTokenModel.create(user.id, refreshTokenStr, refreshExpires);
+
+    return { user, accessToken, refreshToken: refreshTokenStr };
+  }
+
+
   static async verifyEmail(userId: string, code: string): Promise<boolean> {
     const record = await EmailVerificationModel.findLatest(userId);
     if (!record) throw new Error("No verification code found");
@@ -96,11 +103,8 @@ export class AuthService {
     return true;
   }
 
-  /* -------------------------
-     Login with Email
-  ------------------------- */
   static async loginWithEmail(
-    data: LoginData
+    data: LoginData,
   ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
     const user = await UserModel.findByEmail(data.email);
     if (!user) throw new Error("User not found");
@@ -119,21 +123,17 @@ export class AuthService {
     return { user, accessToken, refreshToken: refreshTokenStr };
   }
 
-  /* -------------------------
-     Login / Signup with Google
-  ------------------------- */
   static async loginWithGoogle(
     googleId: string,
     name: string,
-    email?: string
+    email?: string,
   ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
     let user = await UserModel.findByGoogleId(googleId);
 
     if (!user) {
-      // new user
       user = await UserModel.create({
         name,
-        email: email ?? null, // <-- ensure it's string | null
+        email: email ?? null,
         google_id: googleId,
         email_verified: true,
         role: "user",
@@ -149,11 +149,8 @@ export class AuthService {
     return { user, accessToken, refreshToken: refreshTokenStr };
   }
 
-  /* -------------------------
-     Refresh Token
-  ------------------------- */
   static async refreshToken(
-    oldToken: string
+    oldToken: string,
   ): Promise<{ accessToken: string; refreshToken: string }> {
     const tokenRecord = await RefreshTokenModel.find(oldToken);
     if (!tokenRecord) throw new Error("Invalid refresh token");
@@ -161,10 +158,8 @@ export class AuthService {
     const user = await UserModel.findById(tokenRecord.user_id);
     if (!user) throw new Error("User not found");
 
-    // delete old refresh token
     await RefreshTokenModel.delete(oldToken);
 
-    // create new tokens
     const accessToken = generateAccessToken({ sub: user.id, role: user.role });
     const refreshTokenStr = generateRefreshToken({ sub: user.id });
     const refreshExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -174,15 +169,10 @@ export class AuthService {
     return { accessToken, refreshToken: refreshTokenStr };
   }
 
-  /* -------------------------
-     Logout
-  ------------------------- */
   static async logout(refreshToken: string): Promise<void> {
     await RefreshTokenModel.delete(refreshToken);
   }
-  /* -------------------------
-   Google OAuth2 - Get Authorization URL
-------------------------- */
+
   static getGoogleAuthUrl(): string {
     const rootUrl = "https://accounts.google.com/o/oauth2/v2/auth";
 
@@ -208,7 +198,7 @@ export class AuthService {
   }
 
   static async handleGoogleCallback(
-    code: string
+    code: string,
   ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
     // Exchange authorization code for tokens
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
@@ -243,7 +233,7 @@ export class AuthService {
         headers: {
           Authorization: `Bearer ${tokens.access_token}`,
         },
-      }
+      },
     );
 
     if (!userInfoResponse.ok) {
@@ -265,7 +255,7 @@ export class AuthService {
     return this.loginWithGoogle(
       googleUser.id,
       googleUser.name,
-      googleUser.email
+      googleUser.email,
     );
   }
 }

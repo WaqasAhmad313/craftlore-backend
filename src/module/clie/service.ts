@@ -2,14 +2,15 @@ import {
   CLIEUserModel,
   LessonProgressModel,
   QuizAttemptModel,
+  StatModel,
   type CLIEUser,
   type CreateCLIEUserInput,
   type LessonProgress,
   type QuizAnswerDetail,
   type AnonymousUserData,
   type EnrollmentData,
+  type CategoryProgress,
 } from "./model.ts";
-import { CourseService } from "../courses/service.ts";
 import CourseModel from "../courses/model.ts";
 import type { Course, Lesson, Quiz } from "../courses/model.ts";
 
@@ -22,7 +23,7 @@ export class CLIEService {
    */
   static async getOrCreateUser(
     userId: string,
-    initialData?: CreateCLIEUserInput
+    initialData?: CreateCLIEUserInput,
   ): Promise<CLIEUser> {
     let clieUser = await CLIEUserModel.getByUserId(userId);
 
@@ -38,34 +39,63 @@ export class CLIEService {
 
     return clieUser;
   }
-
   /**
    * Get user dashboard data
    */
   static async getDashboardData(userId: string): Promise<{
-    user: CLIEUser;
-    recent_activity: LessonProgress[];
+    user: {
+      id: string;
+      total_points: number;
+      lessons_completed: number;
+      quizzes_passed: number;
+      courses_completed: number;
+    };
+    enrollments: EnrollmentData[];
+    categoryProgress: CategoryProgress;
   }> {
-    const user = await this.getOrCreateUser(userId);
+    console.log("📊 [SERVICE] Getting dashboard data for user:", userId);
 
-    // Get recent lesson progress (last 10)
-    const recentActivity = await this.getRecentActivity(userId, 10);
+    // Get or create CLIE user (this has EVERYTHING we need!)
+    const clieUser = await this.getOrCreateUser(userId);
+
+    // Build categoryProgress from enrollments if empty
+    let categoryProgress = clieUser.category_progress || {};
+
+    if (
+      Object.keys(categoryProgress).length === 0 &&
+      clieUser.enrollments.length > 0
+    ) {
+      console.log("🔧 [SERVICE] Building categoryProgress from enrollments");
+
+      categoryProgress = {};
+      for (const enrollment of clieUser.enrollments) {
+        if (!categoryProgress[enrollment.category]) {
+          categoryProgress[enrollment.category] = {};
+        }
+
+        const category = categoryProgress[enrollment.category];
+        if (category) {
+          category[enrollment.difficulty] = {
+            completed: enrollment.status === "completed",
+            completed_at: enrollment.completed_at || undefined,
+          };
+        }
+      }
+    }
+
+    console.log("✅ [SERVICE] Dashboard data loaded");
 
     return {
-      user,
-      recent_activity: recentActivity,
+      user: {
+        id: clieUser.id,
+        total_points: clieUser.total_points || 0,
+        lessons_completed: clieUser.total_lessons_completed || 0,
+        quizzes_passed: clieUser.total_quizzes_passed || 0,
+        courses_completed: clieUser.total_courses_completed || 0,
+      },
+      enrollments: clieUser.enrollments || [],
+      categoryProgress: categoryProgress,
     };
-  }
-
-  /**
-   * Get recent user activity
-   */
-  private static async getRecentActivity(
-    userId: string,
-    limit: number = 10
-  ): Promise<LessonProgress[]> {
-    const result = await LessonProgressModel.getByCourseAndUser(userId, "");
-    return result.slice(0, limit);
   }
 
   /* ===== COURSE ENROLLMENT ===== */
@@ -75,7 +105,7 @@ export class CLIEService {
    */
   static async canEnrollInCourse(
     userId: string,
-    courseId: string
+    courseId: string,
   ): Promise<{ can_enroll: boolean; reason?: string }> {
     const course = await CourseModel.getCourseById(courseId);
     if (!course) {
@@ -96,7 +126,7 @@ export class CLIEService {
 
     // Check if already enrolled
     const existingEnrollment = clieUser.enrollments.find(
-      (e) => e.course_id === courseId
+      (e) => e.course_id === courseId,
     );
     if (existingEnrollment) {
       return {
@@ -148,12 +178,12 @@ export class CLIEService {
    */
   static async enrollInCourse(
     userId: string,
-    courseId: string
+    courseId: string,
   ): Promise<{ success: boolean; message: string }> {
     // Check if user can enroll
     const { can_enroll, reason } = await this.canEnrollInCourse(
       userId,
-      courseId
+      courseId,
     );
     if (!can_enroll) {
       throw new Error(reason || "Cannot enroll in this course");
@@ -219,7 +249,7 @@ export class CLIEService {
           course_title: course?.title,
           course_description: course?.description,
         };
-      })
+      }),
     );
 
     return enrichedEnrollments;
@@ -232,7 +262,7 @@ export class CLIEService {
    */
   static async getCourseProgress(
     userId: string,
-    courseId: string
+    courseId: string,
   ): Promise<{
     course: Course | null;
     lessons: Array<Lesson & { progress: LessonProgress | null }>;
@@ -246,14 +276,13 @@ export class CLIEService {
     const lessons = await CourseModel.getLessonsByCourse(courseId);
     const progressRecords = await LessonProgressModel.getByCourseAndUser(
       userId,
-      courseId
+      courseId,
     );
 
     // Merge lessons with progress
     const lessonsWithProgress = lessons.map((lesson) => ({
       ...lesson,
-      progress:
-        progressRecords.find((p) => p.lesson_id === lesson.id) || null,
+      progress: progressRecords.find((p) => p.lesson_id === lesson.id) || null,
     }));
 
     // Get enrollment data
@@ -273,11 +302,11 @@ export class CLIEService {
    */
   static async startLesson(
     userId: string,
-    lessonId: string
+    lessonId: string,
   ): Promise<LessonProgress> {
     let progress = await LessonProgressModel.getByUserAndLesson(
       userId,
-      lessonId
+      lessonId,
     );
 
     if (!progress) {
@@ -294,11 +323,6 @@ export class CLIEService {
     return progress;
   }
 
-  /* ===== QUIZ SUBMISSION ===== */
-
-  /**
-   * Submit quiz answers and calculate results
-   */
   static async submitQuiz(
     userId: string,
     lessonId: string,
@@ -306,7 +330,7 @@ export class CLIEService {
       quiz_id: string;
       selected_answer: string;
     }>,
-    timeTaken?: number
+    timeTaken?: number,
   ): Promise<{
     passed: boolean;
     score_percentage: number;
@@ -316,18 +340,46 @@ export class CLIEService {
     answers: QuizAnswerDetail[];
     attempt_number: number;
   }> {
-    // Get lesson
-    const lessonResult = await CourseModel.getLessonsByCourse("");
-    const lesson = lessonResult.find((l) => l.id === lessonId);
-    if (!lesson) {
-      throw new Error("Lesson not found");
-    }
+    console.log("📝 [SERVICE] submitQuiz called:", {
+      userId,
+      lessonId,
+      answersCount: answers.length,
+    });
 
-    // Get all quizzes for this lesson
+    // ✅ FIX 1: First get all quizzes to find the lesson details
     const quizzes = await CourseModel.getQuizzesByLesson(lessonId);
     if (quizzes.length === 0) {
       throw new Error("No quizzes found for this lesson");
     }
+    console.log("✅ [SERVICE] Quizzes loaded:", quizzes.length);
+
+    // ✅ FIX 2: Get lesson progress to find course_id
+    const progress = await LessonProgressModel.getByUserAndLesson(
+      userId,
+      lessonId,
+    );
+    if (!progress) {
+      throw new Error(
+        "Lesson progress not found. Please start the lesson first.",
+      );
+    }
+
+    const courseId = progress.course_id;
+    if (!courseId) {
+      throw new Error("Course ID not found in lesson progress");
+    }
+    console.log("✅ [SERVICE] Course ID found:", courseId);
+
+    // ✅ FIX 3: Now get the lesson with valid course_id (not empty string!)
+    const lessonResult = await CourseModel.getLessonsByCourse(courseId);
+    const lesson = lessonResult.find((l) => l.id === lessonId);
+    if (!lesson) {
+      throw new Error("Lesson not found");
+    }
+    console.log("✅ [SERVICE] Lesson found:", {
+      id: lesson.id,
+      points: lesson.points_reward,
+    });
 
     // Process answers
     const answerDetails: QuizAnswerDetail[] = [];
@@ -358,6 +410,13 @@ export class CLIEService {
     const scorePercentage = Math.round((correctCount / totalQuestions) * 100);
     const passed = scorePercentage >= 50; // 50% = 3 out of 6
 
+    console.log("📊 [SERVICE] Quiz graded:", {
+      correct: correctCount,
+      total: totalQuestions,
+      score: scorePercentage,
+      passed,
+    });
+
     // Calculate points
     const lessonPoints = lesson.points_reward || 0;
     const pointsPerQuestion =
@@ -385,45 +444,46 @@ export class CLIEService {
       time_taken_seconds: timeTaken ?? undefined,
     });
 
-    // Update lesson progress
-    const progress = await LessonProgressModel.getByUserAndLesson(
-      userId,
-      lessonId
-    );
+    console.log("✅ [SERVICE] Quiz attempt created:", attempt.id);
 
-    if (progress) {
-      const currentAttempts = progress.total_attempts + 1;
+    // Update lesson progress - we already have progress from earlier
+    const currentAttempts = progress.total_attempts + 1;
 
-      await LessonProgressModel.update(userId, lessonId, {
-        quiz_attempted: true,
-        quiz_passed: passed,
-        last_attempt_score: scorePercentage,
-        total_attempts: currentAttempts,
-        points_earned: passed ? pointsEarned : progress.points_earned,
-        status: passed ? "completed" : "in_progress",
-        completed_at: passed ? new Date().toISOString() : undefined,
-      });
+    await LessonProgressModel.update(userId, lessonId, {
+      quiz_attempted: true,
+      quiz_passed: passed,
+      last_attempt_score: scorePercentage,
+      total_attempts: currentAttempts,
+      points_earned: passed ? pointsEarned : progress.points_earned,
+      status: passed ? "completed" : "in_progress",
+      completed_at: passed ? new Date().toISOString() : undefined,
+    });
 
-      // If passed, award points and update user stats
-      if (passed) {
-        const course = await CourseModel.getCourseById(progress.course_id);
-        if (course) {
-          await CLIEUserModel.addPoints(
-            userId,
-            pointsEarned,
-            course.craft_category
-          );
-          await CLIEUserModel.incrementLessonsCompleted(userId);
-          await CLIEUserModel.incrementQuizzesPassed(userId);
+    console.log("✅ [SERVICE] Lesson progress updated");
 
-          // Check if course is completed
-          await this.checkAndUpdateCourseCompletion(
-            userId,
-            progress.course_id
-          );
-        }
+    // If passed, award points and update user stats
+    if (passed) {
+      const course = await CourseModel.getCourseById(courseId);
+      if (course) {
+        await CLIEUserModel.addPoints(
+          userId,
+          pointsEarned,
+          course.craft_category,
+        );
+        await CLIEUserModel.incrementLessonsCompleted(userId);
+        await CLIEUserModel.incrementQuizzesPassed(userId);
+
+        console.log("✅ [SERVICE] User stats updated:", {
+          pointsAdded: pointsEarned,
+          category: course.craft_category,
+        });
+
+        // Check if course is completed
+        await this.checkAndUpdateCourseCompletion(userId, courseId);
       }
     }
+
+    console.log("✅ [SERVICE] Quiz submission complete!");
 
     return {
       passed,
@@ -441,7 +501,7 @@ export class CLIEService {
    */
   private static async checkAndUpdateCourseCompletion(
     userId: string,
-    courseId: string
+    courseId: string,
   ): Promise<void> {
     const course = await CourseModel.getCourseById(courseId);
     if (!course) return;
@@ -452,13 +512,13 @@ export class CLIEService {
     const allCompleted = await LessonProgressModel.areAllLessonsCompleted(
       userId,
       courseId,
-      totalLessons
+      totalLessons,
     );
 
     if (allCompleted) {
       const completedCount = await LessonProgressModel.getCompletedCount(
         userId,
-        courseId
+        courseId,
       );
       const progressPercentage = 100;
 
@@ -477,16 +537,16 @@ export class CLIEService {
       await this.checkAndUpdateCategoryProgress(
         userId,
         course.craft_category,
-        course.difficulty_level
+        course.difficulty_level,
       );
     } else {
       // Update progress percentage
       const completedCount = await LessonProgressModel.getCompletedCount(
         userId,
-        courseId
+        courseId,
       );
       const progressPercentage = Math.round(
-        (completedCount / totalLessons) * 100
+        (completedCount / totalLessons) * 100,
       );
 
       await CLIEUserModel.updateEnrollment(userId, courseId, {
@@ -503,7 +563,7 @@ export class CLIEService {
   private static async checkAndUpdateCategoryProgress(
     userId: string,
     category: string,
-    difficulty: string
+    difficulty: string,
   ): Promise<void> {
     const clieUser = await CLIEUserModel.getByUserId(userId);
     if (!clieUser) return;
@@ -511,7 +571,7 @@ export class CLIEService {
     // Get all courses in this category+difficulty
     const allCourses = await CourseModel.getAllCourses();
     const categoryCourses = allCourses.filter(
-      (c) => c.craft_category === category && c.difficulty_level === difficulty
+      (c) => c.craft_category === category && c.difficulty_level === difficulty,
     );
 
     // Check if user completed all of them
@@ -519,7 +579,7 @@ export class CLIEService {
       (e) =>
         e.category === category &&
         e.difficulty === difficulty &&
-        e.status === "completed"
+        e.status === "completed",
     );
 
     if (completedInCategory.length === categoryCourses.length) {
@@ -527,7 +587,7 @@ export class CLIEService {
         userId,
         category,
         difficulty,
-        true
+        true,
       );
     }
   }
@@ -548,7 +608,7 @@ export class CLIEService {
    */
   static async syncAnonymousData(
     userId: string,
-    anonymousData: AnonymousUserData
+    anonymousData: AnonymousUserData,
   ): Promise<{ success: boolean; message: string }> {
     // Ensure user exists
     await this.getOrCreateUser(userId);
@@ -561,7 +621,7 @@ export class CLIEService {
         // If enrollment fails (already enrolled, etc.), continue
         console.error(
           `Failed to enroll in ${enrollment.course_id}:`,
-          (error as Error).message
+          (error as Error).message,
         );
       }
     }
@@ -578,7 +638,7 @@ export class CLIEService {
       } catch (error) {
         console.error(
           `Failed to sync quiz for ${attempt.lesson_id}:`,
-          (error as Error).message
+          (error as Error).message,
         );
       }
     }
@@ -617,5 +677,23 @@ export class CLIEService {
       [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
     }
     return shuffled;
+  }
+}
+export class StatService {
+  static async getDashboardStats() {
+    const [totalCourses, activeLearners, totalLessons, totalPoints] =
+      await Promise.all([
+        StatModel.getTotalCourses(),
+        StatModel.getActiveLearnersCount(),
+        StatModel.getTotalLessons(),
+        StatModel.getTotalPoints(),
+      ]);
+
+    return {
+      totalCourses,
+      activeLearners,
+      totalLessons,
+      totalPoints,
+    };
   }
 }

@@ -201,44 +201,6 @@ export class CLIEUserModel {
     return result.rows[0] ?? null;
   }
 
-  //   /**
-  //    * Update CLIE user profile
-  //    */
-  //   static async updateProfile(
-  //     userId: string,
-  //     payload: UpdateCLIEUserInput
-  //   ): Promise<CLIEUser> {
-  //     const updates: string[] = [];
-  //     const values: any[] = [];
-  //     let paramIndex = 1;
-
-  //     if (payload.craft_specialty !== undefined) {
-  //       updates.push(`craft_specialty = $${paramIndex++}`);
-  //       values.push(payload.craft_specialty);
-  //     }
-  //     if (payload.location !== undefined) {
-  //       updates.push(`location = $${paramIndex++}`);
-  //       values.push(payload.location);
-  //     }
-  //     if (payload.bio !== undefined) {
-  //       updates.push(`bio = $${paramIndex++}`);
-  //       values.push(payload.bio);
-  //     }
-
-  //     updates.push(`updated_at = NOW()`);
-  //     values.push(userId);
-
-  //     const query = `
-  //       UPDATE clie_users
-  //       SET ${updates.join(", ")}
-  //       WHERE user_id = $${paramIndex}
-  //       RETURNING *
-  //     `;
-
-  //     const result = await db.query<CLIEUser>(query, values);
-  //     return result.rows[0]!;
-  //   }
-
   /**
    * Add enrollment to user's enrollments JSONB array
    */
@@ -670,8 +632,40 @@ export class QuizAttemptModel {
   }
 }
 
+export class StatModel {
+  static async getTotalCourses(): Promise<number> {
+    const result = await db.query(
+      'SELECT COUNT(*)::int AS count FROM courses'
+    );
+    return result.rows[0].count;
+  }
+
+  static async getActiveLearnersCount(): Promise<number> {
+    const result = await db.query(
+      'SELECT COUNT(*)::int AS count FROM clie_users'
+    );
+    return result.rows[0].count;
+  }
+
+  static async getTotalLessons(): Promise<number> {
+    const result = await db.query(
+      'SELECT COUNT(*)::int AS count FROM lessons'
+    );
+    return result.rows[0].count;
+  }
+
+  static async getTotalPoints(): Promise<number> {
+    const result = await db.query(
+      'SELECT COALESCE(SUM(points_reward), 0)::int AS total FROM lessons'
+    );
+    return result.rows[0].total;
+  }
+}
+
+
 export default {
   CLIEUserModel,
   LessonProgressModel,
   QuizAttemptModel,
+  StatModel,
 };
