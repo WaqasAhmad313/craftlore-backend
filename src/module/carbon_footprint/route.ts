@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { CarbonFootprintController } from "./controller.ts";
+import { authenticate } from "../../middleware/auth.ts";
 
 const router = Router();
-
 /**
  * POST /api/carbon/calculate
  * HYBRID calculator - works as both quick estimate AND professional assessment
@@ -39,44 +39,28 @@ router.get('/carbon-factors/config/:key', CarbonFootprintController.getConfig);
  * Get all baseline comparisons
  */
 router.get('/carbon-factors/baselines', CarbonFootprintController.getBaselines);
-
 /**
  * GET /api/admin/carbon-factors
  * Get carbon factors - smart route that handles:
  * - GET /api/admin/carbon-factors (all factors)
  * - GET /api/admin/carbon-factors?type=material (by type)
  * - GET /api/admin/carbon-factors?id=123 (by ID)
+ * Requires: Admin authentication
  */
-router.get('/admin/carbon-factors', CarbonFootprintController.getFactors);
+router.get('/admin/carbon-factors', authenticate, CarbonFootprintController.getFactors);
 
 /**
  * POST /api/admin/carbon-factors
  * UPSERT carbon factor (create or update based on presence of ID)
+ * Requires: Admin authentication
  */
-router.post('/admin/carbon-factors', CarbonFootprintController.upsertFactor);
+router.post('/admin/carbon-factors', authenticate, CarbonFootprintController.upsertFactor);
 
 /**
  * DELETE /api/admin/carbon-factors/:id
  * Delete a carbon factor
+ * Requires: Admin authentication
  */
-router.delete('/admin/carbon-factors/:id', CarbonFootprintController.deleteFactor);
-
-/**
- * POST /api/admin/gi-products/:id/carbon/baseline
- * Create or update baseline for a GI product
- */
-router.post('/admin/gi-products/:id/carbon/baseline', CarbonFootprintController.upsertBaseline);
-
-/**
- * PUT /api/admin/gi-products/carbon/baselines/:baseline_id/activate
- * Set a baseline as active
- */
-router.put('/admin/gi-products/carbon/baselines/:baseline_id/activate', CarbonFootprintController.activateBaseline);
-
-/**
- * DELETE /api/admin/gi-products/carbon/baselines/:baseline_id
- * Delete a baseline
- */
-router.delete('/admin/gi-products/carbon/baselines/:baseline_id', CarbonFootprintController.deleteBaseline);
+router.delete('/admin/carbon-factors/:id', authenticate, CarbonFootprintController.deleteFactor);
 
 export default router;

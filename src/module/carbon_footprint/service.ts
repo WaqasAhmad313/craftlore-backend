@@ -192,26 +192,38 @@ export class CarbonFootprintService {
    */
   static async compareProducts(products: any[], userId?: number, sessionId?: string): Promise<any> {
     const results = [];
+    const warnings = [];
 
     for (const product of products) {
       if (product.gi_product_id) {
-        const giProduct = await CarbonFootprintModel.getGiProductWithBaseline(product.gi_product_id);
-        if (giProduct.baseline && giProduct.baseline.total_co2) {
-          results.push({
-            name: product.product_name || giProduct.name,
-            co2: giProduct.baseline.total_co2,
-            breakdown: {
-              material: giProduct.baseline.material_co2,
-              production: giProduct.baseline.production_co2,
-              dyeing: giProduct.baseline.dyeing_co2,
-              embroidery: giProduct.baseline.embroidery_co2,
-              packaging: giProduct.baseline.packaging_co2,
-              logistics: giProduct.baseline.logistics_co2,
-            },
-            sustainability_rating: this.getSustainabilityRating(giProduct.baseline.total_co2),
-          });
+        // Fetch GI product with baseline
+        try {
+          const giProduct = await CarbonFootprintModel.getGiProductWithBaseline(product.gi_product_id);
+          
+          if (giProduct.baseline && giProduct.baseline.total_co2) {
+            // Baseline exists, use it
+            results.push({
+              name: product.product_name || giProduct.name,
+              co2: giProduct.baseline.total_co2,
+              breakdown: {
+                material: giProduct.baseline.material_co2,
+                production: giProduct.baseline.production_co2,
+                dyeing: giProduct.baseline.dyeing_co2,
+                embroidery: giProduct.baseline.embroidery_co2,
+                packaging: giProduct.baseline.packaging_co2,
+                logistics: giProduct.baseline.logistics_co2,
+              },
+              sustainability_rating: this.getSustainabilityRating(giProduct.baseline.total_co2),
+            });
+          } else {
+            // No baseline found
+            warnings.push(`No baseline found for GI product "${product.product_name || giProduct.name}". Please create a baseline first.`);
+          }
+        } catch (error) {
+          warnings.push(`GI product with ID ${product.gi_product_id} not found.`);
         }
       } else if (product.variation) {
+        // Calculate custom variation
         const calcResult = await this.calculate(product.variation);
         results.push({
           name: product.product_name,
@@ -219,14 +231,40 @@ export class CarbonFootprintService {
           breakdown: calcResult.breakdown,
           sustainability_rating: calcResult.sustainability_rating,
         });
+      } else {
+        warnings.push(`Product "${product.product_name}" has neither gi_product_id nor variation data.`);
       }
     }
 
+    // Check if we have at least 2 products to compare
+    if (results.length < 2) {
+      const comparisonResult = {
+        products: results,
+        best_choice: results[0]?.name || '',
+        worst_choice: results[0]?.name || '',
+        warnings: warnings.length > 0 ? warnings : undefined,
+        message: results.length === 1 ? 'Only one product available for comparison.' : 'No products available for comparison.'
+      };
+
+      await CarbonFootprintModel.saveCalculation({
+        calculation_type: 'comparison',
+        user_id: userId,
+        session_id: sessionId,
+        product_config: { products },
+        calculation_result: comparisonResult,
+        total_co2: 0,
+      });
+
+      return comparisonResult;
+    }
+
+    // Sort and determine best/worst
     const sorted = [...results].sort((a, b) => a.co2 - b.co2);
     const comparisonResult = {
       products: results,
       best_choice: sorted[0]?.name || '',
       worst_choice: sorted[sorted.length - 1]?.name || '',
+      warnings: warnings.length > 0 ? warnings : undefined,
     };
 
     await CarbonFootprintModel.saveCalculation({
