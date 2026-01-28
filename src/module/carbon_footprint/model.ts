@@ -1,10 +1,27 @@
 import { db } from "../../config/db.ts";
 
-export type FactorType = 'material' | 'production' | 'dyeing' | 'embroidery' | 'packaging' | 'logistics' | 'certification' | 'baseline' | 'config';
-export type CalculationType = 'gi_product' | 'comparison' | 'quick_estimate' | 'professional_assessment';
-export type ConfidenceLevel = 'high' | 'medium' | 'low';
-export type SystemBoundary = 'artisan_gate' | 'exporter_gate' | 'destination_port' | 'customer_estimate';
-export type DataTier = 'A' | 'B' | 'C';
+export type FactorType =
+  | "material"
+  | "production"
+  | "dyeing"
+  | "embroidery"
+  | "packaging"
+  | "logistics"
+  | "certification"
+  | "baseline"
+  | "config";
+export type CalculationType =
+  | "gi_product"
+  | "comparison"
+  | "quick_estimate"
+  | "professional_assessment";
+export type ConfidenceLevel = "high" | "medium" | "low";
+export type SystemBoundary =
+  | "artisan_gate"
+  | "exporter_gate"
+  | "destination_port"
+  | "customer_estimate";
+export type DataTier = "A" | "B" | "C";
 
 export interface CarbonFactor {
   id: number;
@@ -72,18 +89,18 @@ export class CarbonFootprintModel {
       }
 
       if (updates.length === 0) {
-        throw new Error('No fields to update');
+        throw new Error("No fields to update");
       }
 
       updates.push(`updated_at = NOW()`);
       values.push(params.id);
 
-      const sql = `UPDATE carbon_factors SET ${updates.join(', ')} WHERE id = $${idx} RETURNING *`;
+      const sql = `UPDATE carbon_factors SET ${updates.join(", ")} WHERE id = $${idx} RETURNING *`;
       const result = await db.query(sql, values);
-      
-      if (result.rowCount === 0) throw new Error('Factor not found');
+
+      if (result.rowCount === 0) throw new Error("Factor not found");
       return result.rows[0];
-    } 
+    }
     // No ID provided, CREATE
     else {
       const sql = `
@@ -96,7 +113,7 @@ export class CarbonFootprintModel {
         params.factor_key,
         JSON.stringify(params.factor_data),
         params.is_active ?? true,
-        params.display_order ?? 0
+        params.display_order ?? 0,
       ];
       const result = await db.query(sql, values);
       return result.rows[0];
@@ -107,15 +124,21 @@ export class CarbonFootprintModel {
    * PAGE 4: Get single factor by ID
    */
   static async getFactorById(id: number): Promise<CarbonFactor> {
-    const result = await db.query('SELECT * FROM carbon_factors WHERE id = $1', [id]);
-    if (result.rowCount === 0) throw new Error('Factor not found');
+    const result = await db.query(
+      "SELECT * FROM carbon_factors WHERE id = $1",
+      [id],
+    );
+    if (result.rowCount === 0) throw new Error("Factor not found");
     return result.rows[0];
   }
 
   /**
    * PAGE 3: Get factors by type (for dropdowns in calculator)
    */
-  static async getFactorsByType(factor_type: FactorType, is_active?: boolean): Promise<CarbonFactor[]> {
+  static async getFactorsByType(
+    factor_type: FactorType,
+    is_active?: boolean,
+  ): Promise<CarbonFactor[]> {
     const sql = `
       SELECT * FROM carbon_factors
       WHERE factor_type = $1 AND ($2::boolean IS NULL OR is_active = $2)
@@ -128,13 +151,15 @@ export class CarbonFootprintModel {
   /**
    * PAGE 4: Get all factors with filters
    */
-  static async getAllFactors(params: {
-    factor_type?: FactorType;
-    is_active?: boolean;
-    search?: string;
-    limit?: number;
-    offset?: number;
-  } = {}): Promise<CarbonFactor[]> {
+  static async getAllFactors(
+    params: {
+      factor_type?: FactorType;
+      is_active?: boolean;
+      search?: string;
+      limit?: number;
+      offset?: number;
+    } = {},
+  ): Promise<CarbonFactor[]> {
     const sql = `
       SELECT * FROM carbon_factors
       WHERE ($1::varchar IS NULL OR factor_type = $1)
@@ -148,7 +173,7 @@ export class CarbonFootprintModel {
       params.is_active ?? null,
       params.search ?? null,
       params.limit ?? 100,
-      params.offset ?? 0
+      params.offset ?? 0,
     ];
     const result = await db.query(sql, values);
     return result.rows;
@@ -158,8 +183,11 @@ export class CarbonFootprintModel {
    * PAGE 4: Delete a carbon factor
    */
   static async deleteFactor(id: number): Promise<void> {
-    const result = await db.query('DELETE FROM carbon_factors WHERE id = $1 RETURNING id', [id]);
-    if (result.rowCount === 0) throw new Error('Factor not found');
+    const result = await db.query(
+      "DELETE FROM carbon_factors WHERE id = $1 RETURNING id",
+      [id],
+    );
+    if (result.rowCount === 0) throw new Error("Factor not found");
   }
 
   /**
@@ -168,7 +196,8 @@ export class CarbonFootprintModel {
   static async getConfig(configKey: string): Promise<any> {
     const sql = `SELECT factor_data FROM carbon_factors WHERE factor_type = 'config' AND factor_key = $1`;
     const result = await db.query(sql, [configKey]);
-    if (result.rowCount === 0) throw new Error(`Configuration '${configKey}' not found`);
+    if (result.rowCount === 0)
+      throw new Error(`Configuration '${configKey}' not found`);
     return result.rows[0].factor_data;
   }
 
@@ -176,7 +205,7 @@ export class CarbonFootprintModel {
    * PAGE 1 & 2: Get baseline comparisons (machine-made, fast fashion, synthetic)
    */
   static async getBaselines(): Promise<CarbonFactor[]> {
-    return this.getFactorsByType('baseline', true);
+    return this.getFactorsByType("baseline", true);
   }
 
   /**
@@ -211,9 +240,9 @@ export class CarbonFootprintModel {
       JSON.stringify(params.calculation_result),
       params.total_co2,
       params.confidence_level ?? null,
-      params.region ?? 'kashmir',
+      params.region ?? "kashmir",
       params.system_boundary ?? null,
-      params.data_tier ?? null
+      params.data_tier ?? null,
     ];
     const result = await db.query(sql, values);
     return result.rows[0];
@@ -222,7 +251,10 @@ export class CarbonFootprintModel {
   /**
    * PAGE 3/4: Get user's calculation history
    */
-  static async getUserHistory(userId: number, limit: number = 20): Promise<CarbonCalculation[]> {
+  static async getUserHistory(
+    userId: number,
+    limit: number = 20,
+  ): Promise<CarbonCalculation[]> {
     const sql = `
       SELECT * FROM carbon_calculations
       WHERE user_id = $1
@@ -236,7 +268,10 @@ export class CarbonFootprintModel {
   /**
    * PAGE 3/4: Get session's calculation history (anonymous users)
    */
-  static async getSessionHistory(sessionId: string, limit: number = 20): Promise<CarbonCalculation[]> {
+  static async getSessionHistory(
+    sessionId: string,
+    limit: number = 20,
+  ): Promise<CarbonCalculation[]> {
     const sql = `
       SELECT * FROM carbon_calculations
       WHERE session_id = $1
@@ -267,7 +302,7 @@ export class CarbonFootprintModel {
 
     return {
       total_calculations: parseInt(totalResult.rows[0].total),
-      avg_co2_by_type: avgResult.rows
+      avg_co2_by_type: avgResult.rows,
     };
   }
 
@@ -295,7 +330,7 @@ export class CarbonFootprintModel {
       WHERE p.id = $1
     `;
     const result = await db.query(sql, [gi_product_id]);
-    if (result.rowCount === 0) throw new Error('GI product not found');
+    if (result.rowCount === 0) throw new Error("GI product not found");
     return result.rows[0];
   }
 }

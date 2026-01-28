@@ -11,12 +11,6 @@ const router = Router();
 router.post('/carbon/calculate', CarbonFootprintController.calculate);
 
 /**
- * POST /api/carbon/compare
- * Compare multiple products
- */
-router.post('/carbon/compare', CarbonFootprintController.compareProducts);
-
-/**
  * GET /api/carbon/history
  * Get calculation history for user/session
  */
@@ -33,6 +27,12 @@ router.get('/carbon/statistics', CarbonFootprintController.getStatistics);
  * Get configuration data (product_weights, etc.)
  */
 router.get('/carbon-factors/config/:key', CarbonFootprintController.getConfig);
+
+/**
+ * GET /api/carbon-factors/dropdown-data
+ * Get all carbon factors formatted for dropdowns (PUBLIC - no auth required)
+ */
+router.get('/carbon-factors/dropdown-data', CarbonFootprintController.getDropdownData);
 
 /**
  * GET /api/carbon-factors/baselines

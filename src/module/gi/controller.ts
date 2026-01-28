@@ -167,6 +167,37 @@ class GICraftController {
       });
     }
   }
+
+    /**
+   * GET /api/gi-crafts/details
+   * Get all GI crafts with full details (no filters)
+   *
+   * Query data:
+   * SELECT * FROM get_details_gi_products();
+   */
+  static async getAllCraftDetails(
+    req: Request,
+    res: Response
+  ): Promise<Response> {
+    try {
+      const result = await GICraftService.getAllCraftDetails();
+
+      return res.status(200).json(result);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        console.error("Error in getAllCraftDetails controller:", error.message);
+        return res.status(500).json({
+          success: false,
+          message: error.message,
+        });
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: "Unknown server error",
+      });
+    }
+  }
 }
 
 export default GICraftController;

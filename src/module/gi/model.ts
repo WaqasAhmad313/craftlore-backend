@@ -60,6 +60,38 @@ interface UpsertGIProductResult {
   message: string;
 }
 
+interface GIGoodsDetailsRow {
+  id: number;
+  name: string;
+
+  gi_application_number: number | null;
+  gi_certificate_number: number | null;
+  gi_journal_number: number | null;
+
+  year_of_registration: number | null;
+
+  class: number[]; // int[]
+
+  gi_applicant: string | null;
+
+  slug: string | null;
+  description: string | null;
+
+  category: string | null;
+  status: string | null;
+
+  registered_artisans: number | null;
+
+  geographical_data: JsonValue | null;
+  technical_data: JsonValue | null;
+  authentication_data: JsonValue | null;
+  cultural_data: JsonValue | null;
+  economic_data: JsonValue | null;
+
+  created_at: string; // pg returns string timestamps by default
+  updated_at: string;
+}
+
 class GICraftModel {
   /**
    * Get all GI crafts by calling the database function
@@ -201,6 +233,25 @@ class GICraftModel {
       throw new Error("Unknown database error");
     }
   }
+
+    /**
+   * Get all GI products with full details (joins) by calling the database function
+   * DB function: get_details_gi_products()
+   */
+  static async getAllCraftDetails(): Promise<GIGoodsDetailsRow[]> {
+    const sql = "SELECT * FROM get_details_gi_products()";
+
+    try {
+      const result: QueryResult<GIGoodsDetailsRow> = await db.query(sql);
+      return result.rows;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        throw new Error(`Database error: ${error.message}`);
+      }
+      throw new Error("Unknown database error");
+    }
+  }
+
 }
 
 export default GICraftModel;
@@ -209,4 +260,5 @@ export type {
   GICraftDetail,
   UpsertGIProductInput,
   UpsertGIProductResult,
+  GIGoodsDetailsRow,
 };

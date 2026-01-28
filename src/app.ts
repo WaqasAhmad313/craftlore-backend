@@ -17,6 +17,7 @@ import cookieParser from 'cookie-parser';
 import clieRoute from "./module/clie/route.ts";
 import ambassadorRoute from "./module/ambassador/route.ts";
 import carbonRoute from "./module/carbon_footprint/route.ts";
+import caisRoutes from "./module/cais/index.ts";
 
 const app: Application = express();
 
@@ -34,6 +35,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cookieParser());
 app.use("/api/carbon", carbonRoute);
+app.use("/api/cais", caisRoutes);
 app.use("/api/auth-scrape", authScrape);
 app.use("/api/ambassadors", ambassadorRoute);
 app.use("/api/clie", clieRoute);

@@ -3,6 +3,7 @@ import GICraftController from "./controller.ts";
 
 const router: Router = express.Router();
 
+router.get("/details", GICraftController.getAllCraftDetails);
 router.get('/', GICraftController.getAllCrafts);
 router.get('/categories', GICraftController.getAllCategories);
 router.get('/:identifier', GICraftController.getCraftByIdentifier);

@@ -1,5 +1,5 @@
 import GICraftModel from "./model.ts";
-import type { GICraft, GICraftDetail, UpsertGIProductInput, UpsertGIProductResult } from "./model.ts";
+import type { GICraft, GICraftDetail, UpsertGIProductInput, UpsertGIProductResult, GIGoodsDetailsRow } from "./model.ts";
 
 interface FilterOptions {
   search?: string;
@@ -175,6 +175,23 @@ class GICraftService {
         success: false,
         message: "Unknown service error",
       };
+    }
+  }
+
+   static async getAllCraftDetails(): Promise<ServiceResponse<GIGoodsDetailsRow[]>> {
+    try {
+      const crafts = await GICraftModel.getAllCraftDetails();
+
+      return {
+        success: true,
+        data: crafts,
+        total: crafts.length,
+      };
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return { success: false, message: error.message };
+      }
+      return { success: false, message: "Unknown service error" };
     }
   }
 }

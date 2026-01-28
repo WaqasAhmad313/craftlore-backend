@@ -306,6 +306,42 @@ export class CarbonFootprintService {
     return 'low';
   }
 
+  /**
+   * PUBLIC: Get all dropdown data (no auth required)
+   */
+  static async getAllDropdownData(): Promise<{
+    materials: Array<{ value: string; label: string; co2: number }>;
+    production: Array<{ value: string; label: string; co2: number }>;
+    dyeing: Array<{ value: string; label: string; co2: number }>;
+    embroidery: Array<{ value: string; label: string; co2: number }>;
+    packaging: Array<{ value: string; label: string; co2: number }>;
+    logistics: Array<{ value: string; label: string; co2: number }>;
+    certifications: Array<{ value: string; label: string; co2: number }>;
+  }> {
+    const factors = await CarbonFootprintModel.getAllFactors();
+    
+    const formatDropdown = (type: string) => {
+      return factors
+        .filter(f => f.factor_type === type && f.is_active)
+        .sort((a, b) => a.display_order - b.display_order)
+        .map(f => ({
+          value: f.factor_key,
+          label: f.factor_key,
+          co2: (f.factor_data as any).co2_value || (f.factor_data as any).base_co2 || 0
+        }));
+    };
+
+    return {
+      materials: formatDropdown('material'),
+      production: formatDropdown('production'),
+      dyeing: formatDropdown('dyeing'),
+      embroidery: formatDropdown('embroidery'),
+      packaging: formatDropdown('packaging'),
+      logistics: formatDropdown('logistics'),
+      certifications: formatDropdown('certification'),
+    };
+  }
+
   private static getSustainabilityRating(co2: number): any {
     if (co2 < 5) return { rating: 'Excellent', stars: 5, color: '#10b981' };
     if (co2 < 10) return { rating: 'Very Good', stars: 4, color: '#84cc16' };
