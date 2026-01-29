@@ -70,40 +70,46 @@ export interface PamAppraisalRow {
   vendor_name: string;
   vendor_email: string;
   gi_verified: boolean;
-  appraisal_status: AppraisalStatus;
+  status: AppraisalStatus;
   admin_notes: string | null;
   reviewed_at: string | null;
   created_at: string;
   updated_at: string;
 
   // JSON payload (full PAM form)
-  pam_payload: unknown;
+  pam: unknown;
 }
 
 /** ---------- Model ---------- */
 class PamModel {
   static async create(payload: CreatePamAppraisalInput): Promise<PamAppraisalRow> {
     const query = `
-      INSERT INTO pam_appraisals (
+      INSERT INTO appraisals (
         craft_type,
         craft_name,
+        gi_number,
+        product_description,
         region,
         vendor_name,
         vendor_email,
+        vendor_phone,
         gi_verified,
-        appraisal_status,
-        pam_payload
+        status,
+        pam
       )
-      VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7::jsonb)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10::jsonb)
       RETURNING *
     `;
 
     const values = [
       payload.craft_identity.craft_type,
       payload.craft_identity.craft_name,
+      payload.craft_identity.gi_number ?? null,
+      payload.craft_identity.product_description ?? null,
       payload.craft_identity.region,
       payload.craft_identity.vendor_name,
       payload.craft_identity.vendor_email,
+      payload.craft_identity.vendor_phone ?? null,
       payload.craft_identity.gi_verified,
       JSON.stringify(payload),
     ];
@@ -114,7 +120,7 @@ class PamModel {
 
   static async getById(id: string): Promise<PamAppraisalRow | null> {
     const result = await db.query<PamAppraisalRow>(
-      `SELECT * FROM pam_appraisals WHERE id = $1 LIMIT 1`,
+      `SELECT * FROM appraisals WHERE id = $1 LIMIT 1`,
       [id],
     );
     return result.rows[0] ?? null;
@@ -130,7 +136,7 @@ class PamModel {
     let i = 1;
 
     if (params.status) {
-      where.push(`appraisal_status = $${i++}`);
+      where.push(`status = $${i++}`);
       values.push(params.status);
     }
 
@@ -143,7 +149,7 @@ class PamModel {
 
     const query = `
       SELECT *
-      FROM pam_appraisals
+      FROM appraisals
       ${whereSql}
       ORDER BY created_at DESC
       LIMIT $${limitIdx}
@@ -163,10 +169,10 @@ class PamModel {
     const query = `
       SELECT
         COUNT(*)::int AS total,
-        COUNT(*) FILTER (WHERE appraisal_status = 'pending')::int AS pending,
-        COUNT(*) FILTER (WHERE appraisal_status = 'approved')::int AS approved,
-        COUNT(*) FILTER (WHERE appraisal_status = 'rejected')::int AS rejected
-      FROM pam_appraisals
+        COUNT(*) FILTER (WHERE status = 'pending')::int AS pending,
+        COUNT(*) FILTER (WHERE status = 'approved')::int AS approved,
+        COUNT(*) FILTER (WHERE status = 'rejected')::int AS rejected
+      FROM appraisals
     `;
     const result = await db.query<{
       pending: number;
@@ -180,9 +186,9 @@ class PamModel {
 
   static async updatePayload(id: string, pamPayload: unknown): Promise<PamAppraisalRow | null> {
     const query = `
-      UPDATE pam_appraisals
+      UPDATE appraisals
       SET
-        pam_payload = $2::jsonb,
+        pam = $2::jsonb,
         updated_at = NOW()
       WHERE id = $1
       RETURNING *
@@ -198,9 +204,9 @@ class PamModel {
     reviewed_at?: string | null;
   }): Promise<PamAppraisalRow | null> {
     const query = `
-      UPDATE pam_appraisals
+      UPDATE appraisals
       SET
-        appraisal_status = $2,
+        status = $2,
         admin_notes = $3,
         reviewed_at = $4,
         updated_at = NOW()
@@ -220,7 +226,7 @@ class PamModel {
 
   static async deleteById(id: string): Promise<boolean> {
     const result = await db.query<{ id: string }>(
-      `DELETE FROM pam_appraisals WHERE id = $1 RETURNING id`,
+      `DELETE FROM appraisals WHERE id = $1 RETURNING id`,
       [id],
     );
     return result.rowCount === 1;

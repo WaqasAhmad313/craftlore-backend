@@ -2,6 +2,26 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import MreService from "./service.ts";
 
+const JsonObjectSchema = z
+  .unknown()
+  .optional()
+  .transform((v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {}))
+  .pipe(z.record(z.string(), z.unknown()));
+
+const NullableDateString = z
+  .string()
+  .min(1)
+  .nullable()
+  .optional()
+  .transform((v) => (v === undefined ? null : v));
+
+const NullableString = z
+  .string()
+  .min(1)
+  .nullable()
+  .optional()
+  .transform((v) => (v === undefined ? null : v));
+
 const RateSchema = z.object({
   craft_type: z.string().min(1),
   region: z.string().min(1),
@@ -11,8 +31,11 @@ const RateSchema = z.object({
   trend_direction: z.enum(["up", "down", "stable"]).default("stable"),
   trend_percentage: z.number().finite().default(0),
   effective_from: z.string().min(1),
-  effective_until: z.string().nullable().default(null),
-  source: z.unknown().optional().default({}),
+  effective_until: NullableDateString,
+
+  // DB shape:
+  source_name: z.string().min(1).nullable().optional().transform((v) => (v === undefined ? null : v)),
+  source_meta: JsonObjectSchema.default({}),
 });
 
 const RatePatchSchema = RateSchema.partial();
@@ -21,28 +44,39 @@ const BulkImportSchema = z.object({
   rows: z.array(RateSchema).min(1),
 });
 
+// Accept both "description" and "category_description" (don’t make API users guess)
 const CategorySchema = z.object({
   category_name: z.string().min(1),
-  category_description: z.string().optional().nullable(),
+  description: NullableString,
+  category_description: NullableString,
 });
 
 const ModifierSchema = z.object({
   modifier_name: z.string().min(1),
-  category_id: z.string().uuid().optional().nullable(),
-  description: z.string().optional().nullable(),
+
+  // support either; frontend will be adjusted, but keep this flexible
+  category_id: z.string().min(1).optional().nullable(),
+  category_name: z.string().min(1).optional(),
+
+  description: NullableString,
   modifier_type: z.enum(["percentage", "multiplier", "fixed_amount"]),
   modifier_value: z.number().finite(),
-  craft_type: z.string().optional().nullable(),
-  region: z.string().optional().nullable(),
-  rate_type: z.string().optional().nullable().default("all"),
-  specification_key: z.string().optional().nullable(),
-  specification_value: z.string().optional().nullable(),
+
+  craft_type: NullableString,
+  region: NullableString,
+  rate_type: z.enum(["all", "retail", "wholesale", "export"]).default("all"),
+
+  specification_key: NullableString,
+  specification_value: NullableString,
+
   priority: z.number().int().default(0),
   is_stackable: z.boolean().default(true),
   is_active: z.boolean().default(true),
+
   effective_from: z.string().min(1),
-  effective_until: z.string().optional().nullable(),
-  example_calculation: z.string().optional().nullable(),
+
+  example_calculation: NullableString,
+  meta: JsonObjectSchema.default({}),
 });
 
 const ModifierPatchSchema = ModifierSchema.partial();
@@ -134,8 +168,14 @@ export default class MreController {
       return res.status(400).json({ success: false, message: "Invalid category", issues: parsed.error.issues });
     }
 
+    // Normalize so service/model always gets one field name
+    const payload = {
+      category_name: parsed.data.category_name,
+      category_description: parsed.data.category_description ?? parsed.data.description ?? null,
+    };
+
     try {
-      const created = await MreService.createCategory(parsed.data);
+      const created = await MreService.createCategory(payload);
       return res.status(201).json({ success: true, data: created });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to create category";
@@ -160,17 +200,34 @@ export default class MreController {
       return res.status(400).json({ success: false, message: "Invalid modifier", issues: parsed.error.issues });
     }
 
+    // Enforce: need either category_name or category_id
+    const category_name = parsed.data.category_name ?? null;
+    const category_id = parsed.data.category_id ?? null;
+
+    if (!category_name && !category_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid modifier",
+        issues: [{ path: ["category_name"], message: "category_name or category_id is required" }],
+      });
+    }
+
+    // Normalize optional nullable fields so TS matches service/model types (no undefined)
+    const payload = {
+      ...parsed.data,
+      category_name, // string | null
+      category_id,   // string | null
+      craft_type: parsed.data.craft_type ?? null,
+      region: parsed.data.region ?? null,
+      description: parsed.data.description ?? null,
+      specification_key: parsed.data.specification_key ?? null,
+      specification_value: parsed.data.specification_value ?? null,
+      example_calculation: parsed.data.example_calculation ?? null,
+      meta: parsed.data.meta ?? {},
+    };
+
     try {
-      const created = await MreService.createModifier({
-        ...parsed.data,
-        // fields required by model but not in request:
-        is_category: false,
-        category_name: null,
-        category_description: null,
-        id: "" as never,
-        created_at: "" as never,
-        updated_at: "" as never,
-      } as never);
+      const created = await MreService.createModifier(payload as never);
       return res.status(201).json({ success: true, data: created });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to create modifier";
@@ -184,8 +241,20 @@ export default class MreController {
       return res.status(400).json({ success: false, message: "Invalid patch", issues: parsed.error.issues });
     }
 
+    // Normalize undefined -> null for fields your model/service treat as nullable
+    const patch = {
+      ...parsed.data,
+      craft_type: parsed.data.craft_type ?? undefined, // patch semantics: omit means "no change"
+      region: parsed.data.region ?? undefined,
+      description: parsed.data.description ?? undefined,
+      specification_key: parsed.data.specification_key ?? undefined,
+      specification_value: parsed.data.specification_value ?? undefined,
+      example_calculation: parsed.data.example_calculation ?? undefined,
+      meta: parsed.data.meta ?? undefined,
+    };
+
     try {
-      const updated = await MreService.updateModifier(req.params.id as string, parsed.data);
+      const updated = await MreService.updateModifier(req.params.id as string, patch as never);
       return res.status(200).json({ success: true, data: updated });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to update modifier";

@@ -1,11 +1,17 @@
 import { db } from "../../../config/db.ts";
 
-export interface FveValuationRow {
+export interface AppraisalValuationRow {
   id: string;
-  appraisal_id: string;
-  valuation: unknown;        // jsonb
-  rule_snapshot: unknown;    // jsonb
-  computed_at: string;
+  appraisal_id: number;
+  rule_version_id: string | null;
+
+  fair_value_min: string;
+  fair_value_max: string;
+  fair_value_midpoint: string;
+  confidence_score: string | null;
+
+  breakdown: unknown;
+  created_at: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -17,46 +23,128 @@ function asNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+/**
+ * Keeps the same external behavior as before:
+ * - getValuationByAppraisalId() returns a valuation object (not a DB row)
+ * - computeAndSaveValuation() returns the valuation object
+ */
 class FveService {
-  static async getValuationByAppraisalId(appraisalId: string): Promise<unknown | null> {
-    const result = await db.query<FveValuationRow>(
-      `SELECT * FROM fve_valuations WHERE appraisal_id = $1 LIMIT 1`,
+  static async getValuationByAppraisalId(appraisalId: string): Promise<Record<string, unknown> | null> {
+    const result = await db.query<AppraisalValuationRow>(
+      `
+      SELECT
+        id,
+        appraisal_id,
+        rule_version_id,
+        fair_value_min,
+        fair_value_max,
+        fair_value_midpoint,
+        confidence_score,
+        breakdown,
+        created_at
+      FROM public.appraisal_valuations
+      WHERE appraisal_id = $1
+      LIMIT 1
+      `,
       [appraisalId],
     );
-    return result.rows[0]?.valuation ?? null;
+
+    const row = result.rows[0];
+    if (!row) return null;
+
+    // Return the same shape your UI expects (material_cost, labor_cost, etc.)
+    // We stored those inside breakdown.
+    const breakdown = asRecord(row.breakdown);
+
+    return {
+      // components (if available)
+      material_cost: asNumber(breakdown.material_cost),
+      labor_cost: asNumber(breakdown.labor_cost),
+      craftsmanship_premium: asNumber(breakdown.craftsmanship_premium),
+      provenance_adjustment: asNumber(breakdown.provenance_adjustment),
+
+      // valuation summary
+      fair_value_min: Number(row.fair_value_min),
+      fair_value_max: Number(row.fair_value_max),
+      fair_value_midpoint: Number(row.fair_value_midpoint),
+      confidence_score: row.confidence_score === null ? null : Number(row.confidence_score),
+      currency: typeof breakdown.currency === "string" ? breakdown.currency : "INR",
+
+      // metadata (won’t break anything if ignored)
+      meta: {
+        id: row.id,
+        appraisal_id: row.appraisal_id,
+        rule_version_id: row.rule_version_id,
+        created_at: row.created_at,
+      },
+    };
   }
 
   static async deleteValuationByAppraisalId(appraisalId: string): Promise<void> {
-    await db.query(`DELETE FROM fve_valuations WHERE appraisal_id = $1`, [appraisalId]);
+    await db.query(`DELETE FROM public.appraisal_valuations WHERE appraisal_id = $1`, [appraisalId]);
   }
 
   static async computeAndSaveValuation(args: {
     appraisalId: string;
     pamPayload: unknown;
-  }): Promise<unknown> {
+  }): Promise<Record<string, unknown>> {
     const valuation = this.computeValuation(args.pamPayload);
 
-    const ruleSnapshot = {
-      version: "v1",
-      note: "Basic valuation formula snapshot stored with result",
+    // Map into table columns
+    const fairMin = asNumber(valuation.fair_value_min);
+    const fairMax = asNumber(valuation.fair_value_max);
+    const fairMid = asNumber(valuation.fair_value_midpoint);
+    const confidence = asNumber(valuation.confidence_score);
+
+    // Store remaining details in breakdown jsonb
+    const breakdown = {
+      material_cost: asNumber(valuation.material_cost),
+      labor_cost: asNumber(valuation.labor_cost),
+      craftsmanship_premium: asNumber(valuation.craftsmanship_premium),
+      provenance_adjustment: asNumber(valuation.provenance_adjustment),
+      currency: typeof valuation.currency === "string" ? valuation.currency : "INR",
+      // You can add more later without schema changes
+      rule_snapshot: {
+        version: "v1",
+        note: "Basic valuation formula snapshot stored with result",
+      },
     };
 
     const query = `
-      INSERT INTO fve_valuations (appraisal_id, valuation, rule_snapshot, computed_at)
-      VALUES ($1, $2::jsonb, $3::jsonb, NOW())
+      INSERT INTO public.appraisal_valuations (
+        appraisal_id,
+        fair_value_min,
+        fair_value_max,
+        fair_value_midpoint,
+        confidence_score,
+        breakdown
+      )
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb)
       ON CONFLICT (appraisal_id)
       DO UPDATE SET
-        valuation = EXCLUDED.valuation,
-        rule_snapshot = EXCLUDED.rule_snapshot,
-        computed_at = NOW()
-      RETURNING *
+        fair_value_min = EXCLUDED.fair_value_min,
+        fair_value_max = EXCLUDED.fair_value_max,
+        fair_value_midpoint = EXCLUDED.fair_value_midpoint,
+        confidence_score = EXCLUDED.confidence_score,
+        breakdown = EXCLUDED.breakdown,
+        created_at = NOW()
+      RETURNING id
     `;
 
-    await db.query(query, [args.appraisalId, JSON.stringify(valuation), JSON.stringify(ruleSnapshot)]);
+    await db.query(query, [
+      args.appraisalId,
+      fairMin,
+      fairMax,
+      fairMid,
+      confidence,
+      JSON.stringify(breakdown),
+    ]);
+
+    // Return the valuation object exactly like before
     return valuation;
   }
 
-  /** Produces fields used by the UI (material_cost, labor_cost, etc.) :contentReference[oaicite:11]{index=11} */
+  /** Produces fields used by the UI (material_cost, labor_cost, etc.) */
   static computeValuation(pamPayload: unknown): Record<string, unknown> {
     const root = asRecord(pamPayload);
 
@@ -72,7 +160,6 @@ class FveService {
       return sum + qty * unitCost;
     }, 0);
 
-    // crude but consistent: map skill tier to hourly rate
     const tier = String(labor.skill_tier ?? "journeyman").toLowerCase();
     const hours = asNumber(labor.hours_spent);
 
@@ -85,11 +172,10 @@ class FveService {
 
     const laborCost = hours * hourly;
 
-    const complexity = asNumber(craftsmanship.complexity_score, 5);         // 0-10
-    const mastery = asNumber(craftsmanship.technique_mastery_score, 5);    // 0-10
+    const complexity = asNumber(craftsmanship.complexity_score, 5);
+    const mastery = asNumber(craftsmanship.technique_mastery_score, 5);
     const innovation = asNumber(craftsmanship.innovation_factor, 1);
 
-    // craftsmanship premium grows with complexity/mastery/innovation
     const craftsmanshipPremium =
       (materialCost + laborCost) *
       (0.05 + (complexity / 10) * 0.10 + (mastery / 10) * 0.08) *

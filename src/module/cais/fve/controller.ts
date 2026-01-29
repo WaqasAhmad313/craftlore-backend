@@ -3,7 +3,7 @@ import { z } from "zod";
 import FveService from "./service.ts";
 
 const RecalcSchema = z.object({
-  appraisal_id: z.string().uuid(),
+  appraisal_id: z.coerce.number().int().positive(),
   pam_payload: z.unknown(),
 });
 
@@ -17,7 +17,7 @@ export default class FveController {
 
     try {
       const valuation = await FveService.computeAndSaveValuation({
-        appraisalId: parsed.data.appraisal_id,
+        appraisalId: String(parsed.data.appraisal_id),
         pamPayload: parsed.data.pam_payload,
       });
       return res.status(200).json({ success: true, data: valuation });

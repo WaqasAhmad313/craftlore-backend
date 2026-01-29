@@ -26,6 +26,7 @@ class PamService {
 
   static async getDetails(id: string): Promise<{
     appraisal: PamAppraisalRow;
+
     valuation: unknown | null;
   } | null> {
     const appraisal = await PamModel.getById(id);
@@ -51,7 +52,7 @@ class PamService {
 
     const valuation = await FveService.computeAndSaveValuation({
       appraisalId: id,
-      pamPayload: updated.pam_payload,
+      pamPayload: updated.pam,
     });
 
     return { appraisal: updated, valuation };
