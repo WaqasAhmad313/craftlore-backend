@@ -1,336 +1,287 @@
 import { db } from "../../config/db.ts";
 
-export type FactorType =
-  | "material"
-  | "production"
-  | "dyeing"
-  | "embroidery"
-  | "packaging"
-  | "logistics"
-  | "certification"
-  | "baseline"
-  | "config";
-export type CalculationType =
-  | "gi_product"
-  | "comparison"
-  | "quick_estimate"
-  | "professional_assessment";
-export type ConfidenceLevel = "high" | "medium" | "low";
-export type SystemBoundary =
-  | "artisan_gate"
-  | "exporter_gate"
-  | "destination_port"
-  | "customer_estimate";
-export type DataTier = "A" | "B" | "C";
+/** ---------------- Types ---------------- */
 
-export interface CarbonFactor {
+export type CalculatorMode = "estimated" | "detailed";
+
+export type FactorUnit =
+  | "kg_per_kg"
+  | "kg_per_item"
+  | "kg_per_shipment"
+  | "kg_per_m2"
+  | "percent"
+  | "config";
+
+export interface CarbonFactorRow {
   id: number;
-  factor_type: FactorType;
+  factor_type: string;
   factor_key: string;
-  factor_data: any;
+  display_name: string;
+  unit: FactorUnit;
+  value: string | null; // pg numeric comes back as string
+  meta: unknown; // stored as JSONB
   is_active: boolean;
-  display_order: number;
-  created_at: string;
+  updated_at: string; // timestamp
+}
+
+export interface CraftCalculatorRow {
+  craft_id: string;
+  craft_name: string;
+  category: string | null;
+  config: unknown; // JSONB
+  is_active: boolean;
   updated_at: string;
 }
 
-export interface CarbonCalculation {
+export interface CraftCalculatorListRow {
+  craft_id: string;
+  craft_name: string;
+  category: string | null;
+  updated_at: string;
+}
+
+export interface CarbonCalculationRow {
   id: number;
-  calculation_type: CalculationType;
-  user_id: number | null;
-  session_id: string | null;
-  product_config: any;
-  calculation_result: any;
-  total_co2: number;
-  confidence_level: ConfidenceLevel | null;
-  region: string;
-  system_boundary: SystemBoundary | null;
-  data_tier: DataTier | null;
+  craft_id: string;
+  mode: CalculatorMode;
+  inputs: unknown;
+  result: unknown;
   created_at: string;
 }
 
-export class CarbonFootprintModel {
-  /**
-   * PAGE 4: UPSERT carbon factor (create if no id, update if id exists)
-   */
-  static async upsertFactor(params: {
-    id?: number;
-    factor_type: FactorType;
-    factor_key: string;
-    factor_data: any;
+/** ---------------- Models ---------------- */
+
+export class CraftCalculatorModel {
+  static async listActive(): Promise<CraftCalculatorListRow[]> {
+    const q = `
+      SELECT craft_id, craft_name, category, updated_at
+      FROM public.craft_calculators
+      WHERE is_active = true
+      ORDER BY category NULLS LAST, craft_name ASC
+    `;
+    const r = await db.query<CraftCalculatorListRow>(q);
+    return r.rows;
+  }
+
+  static async getById(craftId: string): Promise<CraftCalculatorRow | null> {
+    const q = `
+      SELECT craft_id, craft_name, category, config, is_active, updated_at
+      FROM public.craft_calculators
+      WHERE craft_id = $1
+      LIMIT 1
+    `;
+    const r = await db.query<CraftCalculatorRow>(q, [craftId]);
+    return r.rows[0] ?? null;
+  }
+
+  static async upsert(args: {
+    craft_id: string;
+    craft_name: string;
+    category: string | null;
+    config: unknown;
+    is_active: boolean;
+  }): Promise<CraftCalculatorRow> {
+    const q = `
+      INSERT INTO public.craft_calculators (craft_id, craft_name, category, config, is_active, updated_at)
+      VALUES ($1, $2, $3, $4::jsonb, $5, now())
+      ON CONFLICT (craft_id)
+      DO UPDATE SET
+        craft_name = EXCLUDED.craft_name,
+        category   = EXCLUDED.category,
+        config     = EXCLUDED.config,
+        is_active  = EXCLUDED.is_active,
+        updated_at = now()
+      RETURNING craft_id, craft_name, category, config, is_active, updated_at
+    `;
+    const values = [
+      args.craft_id,
+      args.craft_name,
+      args.category,
+      JSON.stringify(args.config),
+      args.is_active,
+    ];
+    const r = await db.query<CraftCalculatorRow>(q, values);
+    return r.rows[0]!;
+  }
+}
+
+export class CarbonFactorModel {
+  static async list(args: {
+    factor_type?: string;
     is_active?: boolean;
-    display_order?: number;
-  }): Promise<CarbonFactor> {
-    // If ID provided, UPDATE
-    if (params.id) {
-      const updates: string[] = [];
-      const values: any[] = [];
-      let idx = 1;
+    q?: string; // search in key/name
+    limit: number;
+    offset: number;
+  }): Promise<CarbonFactorRow[]> {
+    const where: string[] = [];
+    const values: unknown[] = [];
+    let i = 1;
 
-      if (params.factor_type !== undefined) {
-        updates.push(`factor_type = $${idx++}`);
-        values.push(params.factor_type);
-      }
-      if (params.factor_key !== undefined) {
-        updates.push(`factor_key = $${idx++}`);
-        values.push(params.factor_key);
-      }
-      if (params.factor_data !== undefined) {
-        updates.push(`factor_data = $${idx++}`);
-        values.push(JSON.stringify(params.factor_data));
-      }
-      if (params.is_active !== undefined) {
-        updates.push(`is_active = $${idx++}`);
-        values.push(params.is_active);
-      }
-      if (params.display_order !== undefined) {
-        updates.push(`display_order = $${idx++}`);
-        values.push(params.display_order);
-      }
-
-      if (updates.length === 0) {
-        throw new Error("No fields to update");
-      }
-
-      updates.push(`updated_at = NOW()`);
-      values.push(params.id);
-
-      const sql = `UPDATE carbon_factors SET ${updates.join(", ")} WHERE id = $${idx} RETURNING *`;
-      const result = await db.query(sql, values);
-
-      if (result.rowCount === 0) throw new Error("Factor not found");
-      return result.rows[0];
+    if (args.factor_type) {
+      where.push(`factor_type = $${i++}`);
+      values.push(args.factor_type);
     }
-    // No ID provided, CREATE
-    else {
-      const sql = `
-        INSERT INTO carbon_factors (factor_type, factor_key, factor_data, is_active, display_order)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING *
-      `;
-      const values = [
-        params.factor_type,
-        params.factor_key,
-        JSON.stringify(params.factor_data),
-        params.is_active ?? true,
-        params.display_order ?? 0,
-      ];
-      const result = await db.query(sql, values);
-      return result.rows[0];
+    if (typeof args.is_active === "boolean") {
+      where.push(`is_active = $${i++}`);
+      values.push(args.is_active);
     }
-  }
+    if (args.q && args.q.trim()) {
+      where.push(`(factor_key ILIKE $${i} OR display_name ILIKE $${i})`);
+      values.push(`%${args.q.trim()}%`);
+      i++;
+    }
 
-  /**
-   * PAGE 4: Get single factor by ID
-   */
-  static async getFactorById(id: number): Promise<CarbonFactor> {
-    const result = await db.query(
-      "SELECT * FROM carbon_factors WHERE id = $1",
-      [id],
-    );
-    if (result.rowCount === 0) throw new Error("Factor not found");
-    return result.rows[0];
-  }
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-  /**
-   * PAGE 3: Get factors by type (for dropdowns in calculator)
-   */
-  static async getFactorsByType(
-    factor_type: FactorType,
-    is_active?: boolean,
-  ): Promise<CarbonFactor[]> {
-    const sql = `
-      SELECT * FROM carbon_factors
-      WHERE factor_type = $1 AND ($2::boolean IS NULL OR is_active = $2)
-      ORDER BY display_order ASC, factor_key ASC
+    values.push(args.limit);
+    const limitIdx = i++;
+    values.push(args.offset);
+    const offsetIdx = i++;
+
+    const q = `
+      SELECT id, factor_type, factor_key, display_name, unit, value, meta, is_active, updated_at
+      FROM public.carbon_factors
+      ${whereSql}
+      ORDER BY factor_type ASC, factor_key ASC
+      LIMIT $${limitIdx}
+      OFFSET $${offsetIdx}
     `;
-    const result = await db.query(sql, [factor_type, is_active ?? null]);
-    return result.rows;
+    const r = await db.query<CarbonFactorRow>(q, values);
+    return r.rows;
   }
 
-  /**
-   * PAGE 4: Get all factors with filters
-   */
-  static async getAllFactors(
-    params: {
-      factor_type?: FactorType;
-      is_active?: boolean;
-      search?: string;
-      limit?: number;
-      offset?: number;
-    } = {},
-  ): Promise<CarbonFactor[]> {
-    const sql = `
-      SELECT * FROM carbon_factors
-      WHERE ($1::varchar IS NULL OR factor_type = $1)
-        AND ($2::boolean IS NULL OR is_active = $2)
-        AND ($3::text IS NULL OR factor_key ILIKE '%' || $3 || '%')
-      ORDER BY factor_type ASC, display_order ASC, factor_key ASC
-      LIMIT $4 OFFSET $5
+  static async getByTypeAndKey(type: string, key: string): Promise<CarbonFactorRow | null> {
+    const q = `
+      SELECT id, factor_type, factor_key, display_name, unit, value, meta, is_active, updated_at
+      FROM public.carbon_factors
+      WHERE factor_type = $1 AND factor_key = $2
+      LIMIT 1
     `;
-    const values = [
-      params.factor_type ?? null,
-      params.is_active ?? null,
-      params.search ?? null,
-      params.limit ?? 100,
-      params.offset ?? 0,
-    ];
-    const result = await db.query(sql, values);
-    return result.rows;
+    const r = await db.query<CarbonFactorRow>(q, [type, key]);
+    return r.rows[0] ?? null;
   }
 
-  /**
-   * PAGE 4: Delete a carbon factor
-   */
-  static async deleteFactor(id: number): Promise<void> {
-    const result = await db.query(
-      "DELETE FROM carbon_factors WHERE id = $1 RETURNING id",
-      [id],
-    );
-    if (result.rowCount === 0) throw new Error("Factor not found");
-  }
+  static async getActiveByTypeAndKeys(
+    requests: Array<{ factor_type: string; factor_key: string }>,
+  ): Promise<CarbonFactorRow[]> {
+    if (requests.length === 0) return [];
 
-  /**
-   * PAGE 3: Get config data (product_weights, etc.)
-   */
-  static async getConfig(configKey: string): Promise<any> {
-    const sql = `SELECT factor_data FROM carbon_factors WHERE factor_type = 'config' AND factor_key = $1`;
-    const result = await db.query(sql, [configKey]);
-    if (result.rowCount === 0)
-      throw new Error(`Configuration '${configKey}' not found`);
-    return result.rows[0].factor_data;
-  }
+    // Build VALUES list: (type, key), (type, key) ...
+    const values: unknown[] = [];
+    const tuples: string[] = [];
+    let i = 1;
 
-  /**
-   * PAGE 1 & 2: Get baseline comparisons (machine-made, fast fashion, synthetic)
-   */
-  static async getBaselines(): Promise<CarbonFactor[]> {
-    return this.getFactorsByType("baseline", true);
-  }
+    for (const req of requests) {
+      tuples.push(`($${i++}, $${i++})`);
+      values.push(req.factor_type, req.factor_key);
+    }
 
-  /**
-   * PAGE 3: Save calculation for history
-   */
-  static async saveCalculation(params: {
-    calculation_type: CalculationType;
-    user_id?: number;
-    session_id?: string;
-    product_config: any;
-    calculation_result: any;
-    total_co2: number;
-    confidence_level?: ConfidenceLevel;
-    region?: string;
-    system_boundary?: SystemBoundary;
-    data_tier?: DataTier;
-  }): Promise<CarbonCalculation> {
-    const sql = `
-      INSERT INTO carbon_calculations (
-        calculation_type, user_id, session_id, product_config,
-        calculation_result, total_co2, confidence_level, region,
-        system_boundary, data_tier
+    const q = `
+      WITH req(factor_type, factor_key) AS (
+        VALUES ${tuples.join(",")}
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING *
+      SELECT f.id, f.factor_type, f.factor_key, f.display_name, f.unit, f.value, f.meta, f.is_active, f.updated_at
+      FROM req
+      JOIN public.carbon_factors f
+        ON f.factor_type = req.factor_type
+       AND f.factor_key  = req.factor_key
+      WHERE f.is_active = true
     `;
+    const r = await db.query<CarbonFactorRow>(q, values);
+    return r.rows;
+  }
+
+  static async upsert(args: {
+    factor_type: string;
+    factor_key: string;
+    display_name: string;
+    unit: FactorUnit;
+    value: number | null;
+    meta: unknown;
+    is_active: boolean;
+    // admin tracking (stored into meta)
+    updated_by?: string;
+    change_note?: string;
+  }): Promise<CarbonFactorRow> {
+    const meta = CarbonFactorModel.mergeAdminMeta(args.meta, args.updated_by, args.change_note);
+
+    const q = `
+      INSERT INTO public.carbon_factors (factor_type, factor_key, display_name, unit, value, meta, is_active, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, now())
+      ON CONFLICT (factor_type, factor_key)
+      DO UPDATE SET
+        display_name = EXCLUDED.display_name,
+        unit         = EXCLUDED.unit,
+        value        = EXCLUDED.value,
+        meta         = EXCLUDED.meta,
+        is_active    = EXCLUDED.is_active,
+        updated_at   = now()
+      RETURNING id, factor_type, factor_key, display_name, unit, value, meta, is_active, updated_at
+    `;
+
     const values = [
-      params.calculation_type,
-      params.user_id ?? null,
-      params.session_id ?? null,
-      JSON.stringify(params.product_config),
-      JSON.stringify(params.calculation_result),
-      params.total_co2,
-      params.confidence_level ?? null,
-      params.region ?? "kashmir",
-      params.system_boundary ?? null,
-      params.data_tier ?? null,
+      args.factor_type,
+      args.factor_key,
+      args.display_name,
+      args.unit,
+      args.value,
+      JSON.stringify(meta),
+      args.is_active,
     ];
-    const result = await db.query(sql, values);
-    return result.rows[0];
+
+    const r = await db.query<CarbonFactorRow>(q, values);
+    return r.rows[0]!;
   }
 
-  /**
-   * PAGE 3/4: Get user's calculation history
-   */
-  static async getUserHistory(
-    userId: number,
-    limit: number = 20,
-  ): Promise<CarbonCalculation[]> {
-    const sql = `
-      SELECT * FROM carbon_calculations
-      WHERE user_id = $1
+  private static mergeAdminMeta(meta: unknown, updatedBy?: string, changeNote?: string): unknown {
+    const base = isPlainObject(meta) ? meta : {};
+    const adminMeta: Record<string, unknown> = { ...base };
+
+    if (updatedBy && updatedBy.trim()) adminMeta.last_updated_by = updatedBy.trim();
+    if (changeNote && changeNote.trim()) adminMeta.last_change_note = changeNote.trim();
+    if (updatedBy || changeNote) adminMeta.last_change_at = new Date().toISOString();
+
+    return adminMeta;
+  }
+}
+
+export class CarbonCalculationModel {
+  static async create(args: {
+    craft_id: string;
+    mode: CalculatorMode;
+    inputs: unknown;
+    result: unknown;
+  }): Promise<CarbonCalculationRow> {
+    const q = `
+      INSERT INTO public.carbon_calculations (craft_id, mode, inputs, result, created_at)
+      VALUES ($1, $2, $3::jsonb, $4::jsonb, now())
+      RETURNING id, craft_id, mode, inputs, result, created_at
+    `;
+    const values = [args.craft_id, args.mode, JSON.stringify(args.inputs), JSON.stringify(args.result)];
+    const r = await db.query<CarbonCalculationRow>(q, values);
+    return r.rows[0]!;
+  }
+
+  static async listByCraftId(args: {
+    craft_id: string;
+    limit: number;
+    offset: number;
+  }): Promise<CarbonCalculationRow[]> {
+    const q = `
+      SELECT id, craft_id, mode, inputs, result, created_at
+      FROM public.carbon_calculations
+      WHERE craft_id = $1
       ORDER BY created_at DESC
       LIMIT $2
+      OFFSET $3
     `;
-    const result = await db.query(sql, [userId, limit]);
-    return result.rows;
+    const r = await db.query<CarbonCalculationRow>(q, [args.craft_id, args.limit, args.offset]);
+    return r.rows;
   }
+}
 
-  /**
-   * PAGE 3/4: Get session's calculation history (anonymous users)
-   */
-  static async getSessionHistory(
-    sessionId: string,
-    limit: number = 20,
-  ): Promise<CarbonCalculation[]> {
-    const sql = `
-      SELECT * FROM carbon_calculations
-      WHERE session_id = $1
-      ORDER BY created_at DESC
-      LIMIT $2
-    `;
-    const result = await db.query(sql, [sessionId, limit]);
-    return result.rows;
-  }
+/** ---------------- Helpers ---------------- */
 
-  /**
-   * PAGE 4: Get calculation statistics for admin dashboard
-   */
-  static async getStatistics(): Promise<{
-    total_calculations: number;
-    avg_co2_by_type: Array<{ calculation_type: string; avg_co2: number }>;
-  }> {
-    const totalSql = `SELECT COUNT(*) as total FROM carbon_calculations`;
-    const totalResult = await db.query(totalSql);
-
-    const avgSql = `
-      SELECT calculation_type, ROUND(AVG(total_co2)::numeric, 2) as avg_co2
-      FROM carbon_calculations
-      GROUP BY calculation_type
-      ORDER BY avg_co2 DESC
-    `;
-    const avgResult = await db.query(avgSql);
-
-    return {
-      total_calculations: parseInt(totalResult.rows[0].total),
-      avg_co2_by_type: avgResult.rows,
-    };
-  }
-
-  /**
-   * Get baseline with GI product info (for comparison use)
-   * Note: For full GI product details, use existing GI product routes
-   */
-  static async getGiProductWithBaseline(gi_product_id: number): Promise<any> {
-    const sql = `
-      SELECT 
-        p.id, p.name,
-        json_build_object(
-          'id', b.id,
-          'material_co2', b.material_co2,
-          'production_co2', b.production_co2,
-          'dyeing_co2', b.dyeing_co2,
-          'embroidery_co2', b.embroidery_co2,
-          'packaging_co2', b.packaging_co2,
-          'logistics_co2', b.logistics_co2,
-          'total_co2', b.total_co2
-        ) as baseline
-      FROM gi_products p
-      LEFT JOIN gi_product_carbon_baselines b 
-        ON p.id = b.gi_product_id AND b.is_active = true
-      WHERE p.id = $1
-    `;
-    const result = await db.query(sql, [gi_product_id]);
-    if (result.rowCount === 0) throw new Error("GI product not found");
-    return result.rows[0];
-  }
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }

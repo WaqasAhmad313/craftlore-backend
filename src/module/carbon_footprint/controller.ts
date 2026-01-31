@@ -1,421 +1,248 @@
-// import type { Request, Response } from "express";
-// import { CarbonFootprintService } from "./service.ts";
-// import { CarbonFootprintModel } from "./model.ts";
-
-// // Extend Request type to include session
-// interface RequestWithSession extends Request {
-//   session?: {
-//     id?: string;
-//   };
-// }
-
-// export class CarbonFootprintController {
-//   /**
-//    * POST /api/carbon/calculate
-//    * HYBRID calculator - auto-detects quick or professional mode
-//    */
-//   static async calculate(req: RequestWithSession, res: Response): Promise<void> {
-//     try {
-//       const params = req.body;
-//       const userId = (req as any).user?.id;
-//       const sessionId = req.session?.id || (req.headers['x-session-id'] as string);
-      
-//       const result = await CarbonFootprintService.calculate(params, userId, sessionId);
-//       res.status(200).json({ success: true, data: result });
-//     } catch (error: any) {
-//       res.status(500).json({ success: false, message: error.message });
-//     }
-//   }
-
-//   /**
-//    * POST /api/carbon/compare
-//    * Compare multiple products
-//    */
-//   static async compareProducts(req: RequestWithSession, res: Response): Promise<void> {
-//     try {
-//       const { products } = req.body;
-//       const userId = (req as any).user?.id;
-//       const sessionId = req.session?.id || (req.headers['x-session-id'] as string);
-      
-//       const result = await CarbonFootprintService.compareProducts(products, userId, sessionId);
-//       res.status(200).json({ success: true, data: result });
-//     } catch (error: any) {
-//       res.status(500).json({ success: false, message: error.message });
-//     }
-//   }
-
-//   /**
-//    * GET /api/carbon/history
-//    * Get calculation history
-//    */
-//   static async getHistory(req: RequestWithSession, res: Response): Promise<void> {
-//     try {
-//       const userId = (req as any).user?.id;
-//       const sessionId = req.session?.id || (req.headers['x-session-id'] as string);
-//       const limit = parseInt(req.query.limit as string) || 20;
-      
-//       let calculations;
-//       if (userId) calculations = await CarbonFootprintModel.getUserHistory(userId, limit);
-//       else if (sessionId) calculations = await CarbonFootprintModel.getSessionHistory(sessionId, limit);
-//       else { res.status(400).json({ success: false, message: 'No user or session' }); return; }
-      
-//       res.status(200).json({ success: true, data: calculations });
-//     } catch (error: any) {
-//       res.status(500).json({ success: false, message: error.message });
-//     }
-//   }
-
-//   /**
-//    * GET /api/carbon/statistics
-//    * Get analytics/statistics
-//    */
-//   static async getStatistics(req: Request, res: Response): Promise<void> {
-//     try {
-//       const stats = await CarbonFootprintModel.getStatistics();
-//       res.status(200).json({ success: true, data: stats });
-//     } catch (error: any) {
-//       res.status(500).json({ success: false, message: error.message });
-//     }
-//   }
-
-//   /**
-//    * GET /api/carbon-factors/config/:key
-//    * Get configuration data
-//    */
-//   static async getConfig(req: Request, res: Response): Promise<void> {
-//     try {
-//       const key = req.params.key;
-//       if (!key) {
-//         res.status(400).json({ success: false, message: 'Config key is required' });
-//         return;
-//       }
-      
-//       const config = await CarbonFootprintModel.getConfig(key);
-//       res.status(200).json({ success: true, data: config });
-//     } catch (error: any) {
-//       if (error.message.includes('not found')) res.status(404).json({ success: false, message: error.message });
-//       else res.status(500).json({ success: false, message: error.message });
-//     }
-//   }
-
-//   /**
-//    * GET /api/carbon-factors/baselines
-//    * Get all baseline comparisons
-//    */
-//   static async getBaselines(req: Request, res: Response): Promise<void> {
-//     try {
-//       const baselines = await CarbonFootprintModel.getBaselines();
-//       res.status(200).json({ success: true, data: baselines });
-//     } catch (error: any) {
-//       res.status(500).json({ success: false, message: error.message });
-//     }
-//   }
-
-//   /**
-//    * GET /api/admin/carbon-factors
-//    * SMART GET - handles all cases based on query params:
-//    * - No params: get all
-//    * - ?type=material: get by type
-//    * - ?id=123: get by id
-//    */
-//   static async getFactors(req: Request, res: Response): Promise<void> {
-//     try {
-//       const { id, type, is_active, search, limit, offset } = req.query;
-
-//       // Case 1: Get by ID
-//       if (id) {
-//         const factorId = parseInt(id as string);
-//         if (isNaN(factorId)) {
-//           res.status(400).json({ success: false, message: 'Invalid ID' });
-//           return;
-//         }
-//         const factor = await CarbonFootprintModel.getFactorById(factorId);
-//         res.status(200).json({ success: true, data: factor });
-//         return;
-//       }
-
-//       // Case 2: Get by type
-//       if (type) {
-//         const activeFilter = is_active === 'true' ? true : is_active === 'false' ? false : undefined;
-//         const factors = await CarbonFootprintModel.getFactorsByType(type as any, activeFilter);
-//         res.status(200).json({ success: true, data: factors });
-//         return;
-//       }
-
-//       // Case 3: Get all with filters
-//       const filters = {
-//         is_active: is_active === 'true' ? true : is_active === 'false' ? false : undefined,
-//         search: search as string,
-//         limit: parseInt(limit as string) || 100,
-//         offset: parseInt(offset as string) || 0,
-//       };
-//       const factors = await CarbonFootprintModel.getAllFactors(filters);
-//       res.status(200).json({ success: true, data: factors });
-//     } catch (error: any) {
-//       if (error.message === 'Factor not found') res.status(404).json({ success: false, message: error.message });
-//       else res.status(500).json({ success: false, message: error.message });
-//     }
-//   }
-
-//   /**
-//    * POST /api/admin/carbon-factors
-//    * UPSERT carbon factor (create if no id, update if id exists)
-//    */
-//   static async upsertFactor(req: Request, res: Response): Promise<void> {
-//     try {
-//       const result = await CarbonFootprintModel.upsertFactor(req.body);
-//       const message = req.body.id ? 'Factor updated successfully' : 'Factor created successfully';
-//       const statusCode = req.body.id ? 200 : 201;
-
-//       res.status(statusCode).json({ success: true, message, data: result });
-//     } catch (error: any) {
-//       if (error.message === 'Factor not found') res.status(404).json({ success: false, message: error.message });
-//       else res.status(500).json({ success: false, message: error.message });
-//     }
-//   }
-
-//   /**
-//    * DELETE /api/admin/carbon-factors/:id
-//    * Delete a carbon factor
-//    */
-//   static async deleteFactor(req: Request, res: Response): Promise<void> {
-//     try {
-//       const idParam = req.params.id;
-//       if (!idParam) {
-//         res.status(400).json({ success: false, message: 'ID is required' });
-//         return;
-//       }
-      
-//       const id = parseInt(idParam);
-//       if (isNaN(id)) { 
-//         res.status(400).json({ success: false, message: 'Invalid ID' }); 
-//         return; 
-//       }
-      
-//       await CarbonFootprintModel.deleteFactor(id);
-//       res.status(200).json({ success: true, message: 'Factor deleted' });
-//     } catch (error: any) {
-//       if (error.message === 'Factor not found') res.status(404).json({ success: false, message: error.message });
-//       else res.status(500).json({ success: false, message: error.message });
-//     }
-//   }
-// }
-
-
-
-
 import type { Request, Response } from "express";
-import { CarbonFootprintService } from "./service.ts";
-import { CarbonFootprintModel } from "./model.ts";
+import { CarbonFactorModel, CraftCalculatorModel, type FactorUnit } from "./model.ts";
+import { CarbonCalculatorService, CarbonDashboardService, type CalculationRequest } from "./service.ts";
 
-// Extend Request type to include session
-interface RequestWithSession extends Request {
-  session?: {
-    id?: string;
-  };
+/** ---------------- Controller ---------------- */
+
+export class CarbonController {
+  /** GET /api/carbon/calculators */
+  static async listCalculators(req: Request, res: Response): Promise<Response> {
+    try {
+      const rows = await CarbonCalculatorService.listCalculators();
+      return res.status(200).json({ success: true, data: rows });
+    } catch (e: unknown) {
+      return fail(res, e, "Failed to list calculators");
+    }
+  }
+
+  /** GET /api/carbon/calculators/:craftId */
+  static async getCalculator(req: Request, res: Response): Promise<Response> {
+    try {
+      const craftId = (req.params.craftId ?? "").trim();
+      const row = await CarbonCalculatorService.getCalculator(craftId);
+      if (!row) return res.status(404).json({ success: false, message: "Calculator not found" });
+      return res.status(200).json({ success: true, data: row });
+    } catch (e: unknown) {
+      return fail(res, e, "Failed to get calculator");
+    }
+  }
+
+  /** POST /api/carbon/calculate */
+  static async calculate(req: Request, res: Response): Promise<Response> {
+    try {
+      const body = asObject(req.body);
+
+      const craft_id = getString(body, "craft_id");
+      const mode = getString(body, "mode") as "estimated" | "detailed";
+      const inputs = getObject(body, "inputs");
+      const save = getBoolean(body, "save");
+
+      if (!craft_id) return res.status(400).json({ success: false, message: "craft_id is required" });
+      if (mode !== "estimated" && mode !== "detailed")
+        return res.status(400).json({ success: false, message: "mode must be estimated|detailed" });
+
+      const calcReq: CalculationRequest = {
+        craft_id,
+        mode,
+        inputs,
+        ...(typeof save === "boolean" ? { save } : {}),
+        // optional admin context from auth middleware later
+        requested_by: getString(body, "requested_by") || undefined,
+      };
+
+      const out = await CarbonCalculatorService.calculate(calcReq);
+      return res.status(200).json({ success: true, data: out });
+    } catch (e: unknown) {
+      return fail(res, e, "Calculation failed");
+    }
+  }
+
+  /** GET /api/carbon/dashboard/summary */
+  static async dashboardSummary(_req: Request, res: Response): Promise<Response> {
+    try {
+      const out = await CarbonDashboardService.getSummary();
+      return res.status(200).json({ success: true, data: out });
+    } catch (e: unknown) {
+      return fail(res, e, "Failed to load dashboard summary");
+    }
+  }
 }
 
-export class CarbonFootprintController {
-  /**
-   * POST /api/carbon/calculate
-   * HYBRID calculator - auto-detects quick or professional mode
-   */
-  static async calculate(req: RequestWithSession, res: Response): Promise<void> {
+export class CarbonAdminController {
+  /** GET /api/admin/carbon/factors */
+  static async listFactors(req: Request, res: Response): Promise<Response> {
     try {
-      const params = req.body;
-      const userId = (req as any).user?.id;
-      const sessionId = req.session?.id || (req.headers['x-session-id'] as string);
-      
-      const result = await CarbonFootprintService.calculate(params, userId, sessionId);
-      res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message });
+      const factor_type = typeof req.query.factor_type === "string" ? req.query.factor_type : undefined;
+      const q = typeof req.query.q === "string" ? req.query.q : undefined;
+      const is_active =
+        typeof req.query.is_active === "string"
+          ? req.query.is_active === "true"
+          : typeof req.query.is_active === "boolean"
+            ? req.query.is_active
+            : undefined;
+
+      const limit = clampInt(req.query.limit, 50, 1, 200);
+      const offset = clampInt(req.query.offset, 0, 0, 50000);
+
+      const rows = await CarbonFactorModel.list({ factor_type, is_active, q, limit, offset });
+      return res.status(200).json({ success: true, data: rows });
+    } catch (e: unknown) {
+      return CarbonAdminController.fail(res, e, "Failed to list factors");
     }
   }
 
-  /**
-   * POST /api/carbon/compare
-   * Compare multiple products
-   */
-  static async compareProducts(req: RequestWithSession, res: Response): Promise<void> {
+  /** PUT /api/admin/carbon/factors  (upsert by type+key) */
+  static async upsertFactor(req: Request, res: Response): Promise<Response> {
     try {
-      const { products } = req.body;
-      const userId = (req as any).user?.id;
-      const sessionId = req.session?.id || (req.headers['x-session-id'] as string);
-      
-      const result = await CarbonFootprintService.compareProducts(products, userId, sessionId);
-      res.status(200).json({ success: true, data: result });
-    } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message });
-    }
-  }
+      const body = asObject(req.body);
 
-  /**
-   * GET /api/carbon/history
-   * Get calculation history
-   */
-  static async getHistory(req: RequestWithSession, res: Response): Promise<void> {
-    try {
-      const userId = (req as any).user?.id;
-      const sessionId = req.session?.id || (req.headers['x-session-id'] as string);
-      const limit = parseInt(req.query.limit as string) || 20;
-      
-      let calculations;
-      if (userId) calculations = await CarbonFootprintModel.getUserHistory(userId, limit);
-      else if (sessionId) calculations = await CarbonFootprintModel.getSessionHistory(sessionId, limit);
-      else { res.status(400).json({ success: false, message: 'No user or session' }); return; }
-      
-      res.status(200).json({ success: true, data: calculations });
-    } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message });
-    }
-  }
+      const factor_type = getString(body, "factor_type");
+      const factor_key = getString(body, "factor_key");
+      const display_name = getString(body, "display_name");
+      const unit = getString(body, "unit") as FactorUnit;
+      const value = getOptionalNumber(body, "value"); // allow null
+      const meta = body["meta"] ?? {};
+      const is_active = getOptionalBoolean(body, "is_active") ?? true;
 
-  /**
-   * GET /api/carbon/statistics
-   * Get analytics/statistics
-   */
-  static async getStatistics(req: Request, res: Response): Promise<void> {
-    try {
-      const stats = await CarbonFootprintModel.getStatistics();
-      res.status(200).json({ success: true, data: stats });
-    } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message });
-    }
-  }
-
-  /**
-   * GET /api/carbon-factors/config/:key
-   * Get configuration data
-   */
-  static async getConfig(req: Request, res: Response): Promise<void> {
-    try {
-      const key = req.params.key;
-      if (!key) {
-        res.status(400).json({ success: false, message: 'Config key is required' });
-        return;
+      // guardrails (admin has control, but we prevent nonsense)
+      if (!factor_type || !factor_key || !display_name || !unit) {
+        return res.status(400).json({
+          success: false,
+          message: "factor_type, factor_key, display_name, unit are required",
+        });
       }
-      
-      const config = await CarbonFootprintModel.getConfig(key);
-      res.status(200).json({ success: true, data: config });
-    } catch (error: any) {
-      if (error.message.includes('not found')) res.status(404).json({ success: false, message: error.message });
-      else res.status(500).json({ success: false, message: error.message });
+
+      const allowedUnits: FactorUnit[] = [
+        "kg_per_kg",
+        "kg_per_item",
+        "kg_per_shipment",
+        "kg_per_m2",
+        "percent",
+        "config",
+      ];
+      if (!allowedUnits.includes(unit)) {
+        return res.status(400).json({ success: false, message: `Invalid unit: ${unit}` });
+      }
+
+      // change tracking fields (optional)
+      const updated_by = getString(body, "updated_by") || undefined;
+      const change_note = getString(body, "change_note") || undefined;
+
+      const row = await CarbonFactorModel.upsert({
+        factor_type,
+        factor_key,
+        display_name,
+        unit,
+        value,
+        meta,
+        is_active,
+        updated_by,
+        change_note,
+      });
+
+      return res.status(200).json({ success: true, data: row });
+    } catch (e: unknown) {
+      return CarbonAdminController.fail(res, e, "Failed to upsert factor");
     }
   }
 
-  /**
-   * GET /api/carbon-factors/baselines
-   * Get all baseline comparisons
-   */
-  static async getBaselines(req: Request, res: Response): Promise<void> {
+  /** PUT /api/admin/carbon/calculators/:craftId */
+  static async updateCalculator(req: Request, res: Response): Promise<Response> {
     try {
-      const baselines = await CarbonFootprintModel.getBaselines();
-      res.status(200).json({ success: true, data: baselines });
-    } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message });
-    }
-  }
+      const craftId = (req.params.craftId ?? "").trim();
+      if (!craftId) return res.status(400).json({ success: false, message: "craftId is required" });
 
-  /**
-   * GET /api/admin/carbon-factors
-   * SMART GET - handles all cases based on query params:
-   * - No params: get all
-   * - ?type=material: get by type
-   * - ?id=123: get by id
-   */
-  static async getFactors(req: Request, res: Response): Promise<void> {
-    try {
-      const { id, type, is_active, search, limit, offset } = req.query;
+      const body = asObject(req.body);
+      const craft_name = getString(body, "craft_name");
+      const category = typeof body["category"] === "string" ? (body["category"] as string) : null;
+      const config = body["config"];
+      const is_active = getOptionalBoolean(body, "is_active") ?? true;
 
-      // Case 1: Get by ID
-      if (id) {
-        const factorId = parseInt(id as string);
-        if (isNaN(factorId)) {
-          res.status(400).json({ success: false, message: 'Invalid ID' });
-          return;
+      if (!craft_name) return res.status(400).json({ success: false, message: "craft_name is required" });
+      if (!isPlainObject(config)) return res.status(400).json({ success: false, message: "config must be object" });
+
+      // guardrails: ensure minimum keys exist to prevent admin breaking frontend
+      const required = ["options", "factor_map", "calculation"];
+      for (const k of required) {
+        if (!(k in config)) {
+          return res.status(400).json({ success: false, message: `config missing required key: ${k}` });
         }
-        const factor = await CarbonFootprintModel.getFactorById(factorId);
-        res.status(200).json({ success: true, data: factor });
-        return;
       }
 
-      // Case 2: Get by type
-      if (type) {
-        const activeFilter = is_active === 'true' ? true : is_active === 'false' ? false : undefined;
-        const factors = await CarbonFootprintModel.getFactorsByType(type as any, activeFilter);
-        res.status(200).json({ success: true, data: factors });
-        return;
-      }
+      const row = await CraftCalculatorModel.upsert({
+        craft_id: craftId,
+        craft_name,
+        category,
+        config,
+        is_active,
+      });
 
-      // Case 3: Get all with filters
-      const filters = {
-        is_active: is_active === 'true' ? true : is_active === 'false' ? false : undefined,
-        search: search as string,
-        limit: parseInt(limit as string) || 100,
-        offset: parseInt(offset as string) || 0,
-      };
-      const factors = await CarbonFootprintModel.getAllFactors(filters);
-      res.status(200).json({ success: true, data: factors });
-    } catch (error: any) {
-      if (error.message === 'Factor not found') res.status(404).json({ success: false, message: error.message });
-      else res.status(500).json({ success: false, message: error.message });
+      return res.status(200).json({ success: true, data: row });
+    } catch (e: unknown) {
+      return CarbonAdminController.fail(res, e, "Failed to update calculator");
     }
   }
 
-  /**
-   * POST /api/admin/carbon-factors
-   * UPSERT carbon factor (create if no id, update if id exists)
-   */
-  static async upsertFactor(req: Request, res: Response): Promise<void> {
-    try {
-      const result = await CarbonFootprintModel.upsertFactor(req.body);
-      const message = req.body.id ? 'Factor updated successfully' : 'Factor created successfully';
-      const statusCode = req.body.id ? 200 : 201;
-
-      res.status(statusCode).json({ success: true, message, data: result });
-    } catch (error: any) {
-      if (error.message === 'Factor not found') res.status(404).json({ success: false, message: error.message });
-      else res.status(500).json({ success: false, message: error.message });
-    }
+  private static fail(res: Response, e: unknown, msg: string): Response {
+    const err = e instanceof Error ? e.message : "Unknown error";
+    console.error(msg, e);
+    return res.status(500).json({ success: false, message: msg, error: err });
   }
+}
 
-  /**
-   * DELETE /api/admin/carbon-factors/:id
-   * Delete a carbon factor
-   */
-  static async deleteFactor(req: Request, res: Response): Promise<void> {
-    try {
-      const idParam = req.params.id;
-      if (!idParam) {
-        res.status(400).json({ success: false, message: 'ID is required' });
-        return;
-      }
-      
-      const id = parseInt(idParam);
-      if (isNaN(id)) { 
-        res.status(400).json({ success: false, message: 'Invalid ID' }); 
-        return; 
-      }
-      
-      await CarbonFootprintModel.deleteFactor(id);
-      res.status(200).json({ success: true, message: 'Factor deleted' });
-    } catch (error: any) {
-      if (error.message === 'Factor not found') res.status(404).json({ success: false, message: error.message });
-      else res.status(500).json({ success: false, message: error.message });
-    }
-  }
+function clampInt(v: unknown, def: number, min: number, max: number): number {
+  const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : def;
+  if (!Number.isFinite(n)) return def;
+  return Math.max(min, Math.min(max, Math.trunc(n)));
+}
 
-  /**
-   * GET /api/carbon-factors/dropdown-data
-   * Get all carbon factors formatted for dropdowns (PUBLIC - no auth)
-   */
-  static async getDropdownData(req: Request, res: Response): Promise<void> {
-    try {
-      const data = await CarbonFootprintService.getAllDropdownData();
-      res.status(200).json({ success: true, data });
-    } catch (error: any) {
-      res.status(500).json({ success: false, message: error.message });
-    }
+function asObject(v: unknown): Record<string, unknown> {
+  if (typeof v === "object" && v !== null && !Array.isArray(v)) return v as Record<string, unknown>;
+  return {};
+}
+
+function getString(obj: Record<string, unknown>, key: string): string {
+  const v = obj[key];
+  return typeof v === "string" ? v.trim() : "";
+}
+
+function getObject(obj: Record<string, unknown>, key: string): Record<string, unknown> {
+  const v = obj[key];
+  if (typeof v === "object" && v !== null && !Array.isArray(v)) return v as Record<string, unknown>;
+  return {};
+}
+
+function getBoolean(obj: Record<string, unknown>, key: string): boolean | undefined {
+  const v = obj[key];
+  if (typeof v === "boolean") return v;
+  if (typeof v === "string") {
+    if (v === "true") return true;
+    if (v === "false") return false;
   }
+  return undefined;
+}
+
+function getOptionalBoolean(obj: Record<string, unknown>, key: string): boolean | undefined {
+  return getBoolean(obj, key);
+}
+
+function getOptionalNumber(obj: Record<string, unknown>, key: string): number | null {
+  const v = obj[key];
+  if (v === null) return null;
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim().length > 0) {
+    const n = Number(v.trim());
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function fail(res: Response, e: unknown, msg: string): Response {
+  const err = e instanceof Error ? e.message : "Unknown error";
+  console.error(msg, e);
+  return res.status(500).json({ success: false, message: msg, error: err });
 }
