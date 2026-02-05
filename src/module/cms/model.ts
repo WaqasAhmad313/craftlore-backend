@@ -1,7 +1,5 @@
 import { db } from "../../config/db.ts";
 
-/* ===== Shared Types ===== */
-
 export type PublishStatus = "draft" | "published";
 
 export interface ContentPage {
@@ -12,7 +10,19 @@ export interface ContentPage {
   status: PublishStatus;
   published_at: string | null;
   meta: Record<string, unknown>;
-  sections: unknown[]; // structured JSON, validated in service
+  sections: unknown[];
+  created_at: string;
+}
+
+/** Lighter payload for frontend "meta only" */
+export interface ContentPageMeta {
+  id: string;
+  path: string;
+  slug: string | null;
+  locale: string;
+  status: PublishStatus;
+  published_at: string | null;
+  meta: Record<string, unknown>;
   created_at: string;
 }
 
@@ -36,70 +46,6 @@ export interface UpdatePageInput {
   published_at?: string | null;
 }
 
-export interface ContentEntity {
-  id: string;
-  entity_type: string;
-  key: string | null;
-  locale: string;
-  status: PublishStatus;
-  data: Record<string, unknown>;
-  created_at: string;
-}
-
-export interface CreateEntityInput {
-  entity_type: string;
-  key?: string | null;
-  locale?: string;
-  status?: PublishStatus;
-  data?: Record<string, unknown>;
-}
-
-export interface UpdateEntityInput {
-  entity_type?: string;
-  key?: string | null;
-  locale?: string;
-  status?: PublishStatus;
-  data?: Record<string, unknown>;
-}
-
-export interface FormSubmission {
-  id: string;
-  page_id: string | null;
-  form_key: string;
-  payload: Record<string, unknown>;
-  ip: string | null;
-  user_agent: string | null;
-  created_at: string;
-}
-
-export interface CreateSubmissionInput {
-  page_id?: string | null;
-  form_key?: string;
-  payload: Record<string, unknown>;
-  ip?: string | null;
-  user_agent?: string | null;
-}
-
-export interface ContentEvent {
-  id: string;
-  page_id: string;
-  section_id: string | null;
-  event_type: string;
-  event_data: Record<string, unknown>;
-  created_at: string;
-}
-
-export interface CreateEventInput {
-  page_id: string;
-  section_id?: string | null;
-  event_type: string;
-  event_data?: Record<string, unknown>;
-}
-
-/**
- * Generic update builder that works with typed patch objects
- * (no index signature required).
- */
 function buildUpdateQuery<T extends object>(
   table: string,
   idColumn: string,
@@ -107,22 +53,19 @@ function buildUpdateQuery<T extends object>(
   patch: Partial<T>,
   jsonbColumns: Set<keyof T & string>
 ): { sql: string; values: unknown[] } {
-  const keys = (Object.keys(patch) as Array<keyof T & string>).filter(
-    (k) => (patch as any)[k] !== undefined
-  );
+  const patchRecord = patch as unknown as Record<string, unknown>;
+  const keys = Object.keys(patchRecord).filter((k) => patchRecord[k] !== undefined);
 
-  if (keys.length === 0) {
-    throw new Error("No fields provided to update.");
-  }
+  if (keys.length === 0) throw new Error("No fields provided to update.");
 
   const sets: string[] = [];
   const values: unknown[] = [];
   let idx = 1;
 
   for (const key of keys) {
-    const value = (patch as any)[key];
+    const value = patchRecord[key];
 
-    if (jsonbColumns.has(key)) {
+    if (jsonbColumns.has(key as keyof T & string)) {
       sets.push(`${key} = $${idx}::jsonb`);
       values.push(JSON.stringify(value));
     } else {
@@ -134,29 +77,24 @@ function buildUpdateQuery<T extends object>(
 
   values.push(idValue);
 
-  const sql = `
-    UPDATE ${table}
-    SET ${sets.join(", ")}
-    WHERE ${idColumn} = $${idx}
-    RETURNING *
-  `;
-
-  return { sql, values };
+  return {
+    sql: `
+      UPDATE ${table}
+      SET ${sets.join(", ")}
+      WHERE ${idColumn} = $${idx}
+      RETURNING *
+    `,
+    values,
+  };
 }
 
 class ContentModel {
-  /* ===================== PAGES ===================== */
+  /* ===================== WRITE / DASHBOARD ===================== */
 
   static async createPage(payload: CreatePageInput): Promise<ContentPage> {
     const query = `
       INSERT INTO content.content_pages (
-        path,
-        slug,
-        locale,
-        status,
-        published_at,
-        meta,
-        sections
+        path, slug, locale, status, published_at, meta, sections
       )
       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
       RETURNING *
@@ -180,17 +118,6 @@ class ContentModel {
     const result = await db.query<ContentPage>(
       `SELECT * FROM content.content_pages WHERE id = $1 LIMIT 1`,
       [id]
-    );
-    return result.rows[0] ?? null;
-  }
-
-  static async getPageByPath(
-    path: string,
-    locale: string
-  ): Promise<ContentPage | null> {
-    const result = await db.query<ContentPage>(
-      `SELECT * FROM content.content_pages WHERE path = $1 AND locale = $2 LIMIT 1`,
-      [path, locale]
     );
     return result.rows[0] ?? null;
   }
@@ -220,7 +147,6 @@ class ContentModel {
       `SELECT * FROM content.content_pages ${where} ORDER BY created_at DESC`,
       values
     );
-
     return result.rows;
   }
 
@@ -241,223 +167,73 @@ class ContentModel {
     await db.query(`DELETE FROM content.content_pages WHERE id = $1`, [id]);
   }
 
-  /* ===================== ENTITIES ===================== */
+  /* ===================== FRONTEND READS (PATH-BASED) ===================== */
 
-  static async createEntity(payload: CreateEntityInput): Promise<ContentEntity> {
-    const query = `
-      INSERT INTO content.content_entities (
-        entity_type,
-        key,
-        locale,
-        status,
-        data
-      )
-      VALUES ($1, $2, $3, $4, $5::jsonb)
-      RETURNING *
-    `;
-
-    const values = [
-      payload.entity_type,
-      payload.key ?? null,
-      payload.locale ?? "en",
-      payload.status ?? "draft",
-      JSON.stringify(payload.data ?? {}),
-    ];
-
-    const result = await db.query<ContentEntity>(query, values);
-    return result.rows[0]!;
-  }
-
-  static async getEntityById(id: string): Promise<ContentEntity | null> {
-    const result = await db.query<ContentEntity>(
-      `SELECT * FROM content.content_entities WHERE id = $1 LIMIT 1`,
-      [id]
+  static async getPageMetaByPath(path: string, locale: string): Promise<ContentPageMeta | null> {
+    const result = await db.query<ContentPageMeta>(
+      `
+      SELECT id, path, slug, locale, status, published_at, meta, created_at
+      FROM content.content_pages
+      WHERE path = $1 AND locale = $2
+      LIMIT 1
+      `,
+      [path, locale]
     );
     return result.rows[0] ?? null;
   }
 
-  static async getEntityByKey(
-    key: string,
-    locale: string
-  ): Promise<ContentEntity | null> {
-    const result = await db.query<ContentEntity>(
-      `SELECT * FROM content.content_entities WHERE key = $1 AND locale = $2 LIMIT 1`,
-      [key, locale]
+  static async getPageSectionsByPath(path: string, locale: string): Promise<unknown[] | null> {
+    const result = await db.query<{ sections: unknown[] }>(
+      `
+      SELECT sections
+      FROM content.content_pages
+      WHERE path = $1 AND locale = $2
+      LIMIT 1
+      `,
+      [path, locale]
     );
-    return result.rows[0] ?? null;
+    return result.rows[0]?.sections ?? null;
   }
 
-  static async listEntities(filters?: {
-    locale?: string;
-    status?: PublishStatus;
-    entity_type?: string;
-  }): Promise<ContentEntity[]> {
-    const clauses: string[] = [];
-    const values: unknown[] = [];
-    let idx = 1;
-
-    if (filters?.locale) {
-      clauses.push(`locale = $${idx}`);
-      values.push(filters.locale);
-      idx += 1;
-    }
-    if (filters?.status) {
-      clauses.push(`status = $${idx}`);
-      values.push(filters.status);
-      idx += 1;
-    }
-    if (filters?.entity_type) {
-      clauses.push(`entity_type = $${idx}`);
-      values.push(filters.entity_type);
-      idx += 1;
-    }
-
-    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-
-    const result = await db.query<ContentEntity>(
-      `SELECT * FROM content.content_entities ${where} ORDER BY created_at DESC`,
-      values
-    );
-    return result.rows;
-  }
-
-  static async updateEntity(
-    id: string,
-    patch: UpdateEntityInput
-  ): Promise<ContentEntity> {
-    const { sql, values } = buildUpdateQuery<UpdateEntityInput>(
-      "content.content_entities",
-      "id",
-      id,
-      patch,
-      new Set<keyof UpdateEntityInput & string>(["data"])
+  static async getPageSectionById(
+    path: string,
+    locale: string,
+    sectionId: string
+  ): Promise<Record<string, unknown> | null> {
+    const result = await db.query<{ section: Record<string, unknown> | null }>(
+      `
+      SELECT elem AS section
+      FROM content.content_pages p
+      CROSS JOIN LATERAL jsonb_array_elements(p.sections::jsonb) elem
+      WHERE p.path = $1
+        AND p.locale = $2
+        AND elem->>'id' = $3
+      LIMIT 1
+      `,
+      [path, locale, sectionId]
     );
 
-    const result = await db.query<ContentEntity>(sql, values);
-    return result.rows[0]!;
+    return result.rows[0]?.section ?? null;
   }
 
-  static async deleteEntity(id: string): Promise<void> {
-    await db.query(`DELETE FROM content.content_entities WHERE id = $1`, [id]);
-  }
-
-  /* ===================== FORM SUBMISSIONS ===================== */
-
-  static async createSubmission(
-    payload: CreateSubmissionInput
-  ): Promise<FormSubmission> {
-    const query = `
-      INSERT INTO content.form_submissions (
-        page_id,
-        form_key,
-        payload,
-        ip,
-        user_agent
-      )
-      VALUES ($1, $2, $3::jsonb, $4, $5)
-      RETURNING *
-    `;
-
-    const values = [
-      payload.page_id ?? null,
-      payload.form_key ?? "contact",
-      JSON.stringify(payload.payload),
-      payload.ip ?? null,
-      payload.user_agent ?? null,
-    ];
-
-    const result = await db.query<FormSubmission>(query, values);
-    return result.rows[0]!;
-  }
-
-  static async listSubmissions(filters?: {
-    page_id?: string;
-    form_key?: string;
-  }): Promise<FormSubmission[]> {
-    const clauses: string[] = [];
-    const values: unknown[] = [];
-    let idx = 1;
-
-    if (filters?.page_id) {
-      clauses.push(`page_id = $${idx}`);
-      values.push(filters.page_id);
-      idx += 1;
-    }
-    if (filters?.form_key) {
-      clauses.push(`form_key = $${idx}`);
-      values.push(filters.form_key);
-      idx += 1;
-    }
-
-    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-
-    const result = await db.query<FormSubmission>(
-      `SELECT * FROM content.form_submissions ${where} ORDER BY created_at DESC`,
-      values
+  static async getPageSectionsByType(
+    path: string,
+    locale: string,
+    type: string
+  ): Promise<unknown[] | null> {
+    const result = await db.query<{ sections: unknown[] | null }>(
+      `
+      SELECT COALESCE(jsonb_agg(elem), '[]'::jsonb) AS sections
+      FROM content.content_pages p
+      CROSS JOIN LATERAL jsonb_array_elements(p.sections::jsonb) elem
+      WHERE p.path = $1
+        AND p.locale = $2
+        AND elem->>'type' = $3
+      `,
+      [path, locale, type]
     );
 
-    return result.rows;
-  }
-
-  static async getSubmissionById(id: string): Promise<FormSubmission | null> {
-    const result = await db.query<FormSubmission>(
-      `SELECT * FROM content.form_submissions WHERE id = $1 LIMIT 1`,
-      [id]
-    );
-    return result.rows[0] ?? null;
-  }
-
-  /* ===================== EVENTS ===================== */
-
-  static async createEvent(payload: CreateEventInput): Promise<ContentEvent> {
-    const query = `
-      INSERT INTO content.content_events (
-        page_id,
-        section_id,
-        event_type,
-        event_data
-      )
-      VALUES ($1, $2, $3, $4::jsonb)
-      RETURNING *
-    `;
-
-    const values = [
-      payload.page_id,
-      payload.section_id ?? null,
-      payload.event_type,
-      JSON.stringify(payload.event_data ?? {}),
-    ];
-
-    const result = await db.query<ContentEvent>(query, values);
-    return result.rows[0]!;
-  }
-
-  static async listEvents(filters?: {
-    page_id?: string;
-    event_type?: string;
-  }): Promise<ContentEvent[]> {
-    const clauses: string[] = [];
-    const values: unknown[] = [];
-    let idx = 1;
-
-    if (filters?.page_id) {
-      clauses.push(`page_id = $${idx}`);
-      values.push(filters.page_id);
-      idx += 1;
-    }
-    if (filters?.event_type) {
-      clauses.push(`event_type = $${idx}`);
-      values.push(filters.event_type);
-      idx += 1;
-    }
-
-    const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
-
-    const result = await db.query<ContentEvent>(
-      `SELECT * FROM content.content_events ${where} ORDER BY created_at DESC`,
-      values
-    );
-    return result.rows;
+    return result.rows[0]?.sections ?? null;
   }
 }
 

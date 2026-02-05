@@ -18,6 +18,7 @@ import clieRoute from "./module/clie/route.ts";
 import ambassadorRoute from "./module/ambassador/route.ts";
 import carbonRoute from "./module/carbon_footprint/route.ts";
 import caisRoutes from "./module/cais/index.ts";
+import cmsRoute from "./module/cms/route.ts";
 
 const app: Application = express();
 
@@ -39,6 +40,7 @@ app.use("/api/cais", caisRoutes);
 app.use("/api/auth-scrape", authScrape);
 app.use("/api/ambassadors", ambassadorRoute);
 app.use("/api/clie", clieRoute);
+app.use("/api/cms", cmsRoute);
 app.use("/api/courses", course);
 app.use("/api/evaluations", evaluation);
 app.use("/api/auth", authRoute);

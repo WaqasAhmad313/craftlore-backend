@@ -1,28 +1,31 @@
 import type { Request, Response } from "express";
 import { ContentService } from "./service.ts";
-import type {
-  CreatePageInput,
-  UpdatePageInput,
-  CreateEntityInput,
-  UpdateEntityInput,
-  CreateSubmissionInput,
-  CreateEventInput,
-  PublishStatus,
-} from "./model.ts";
+import type { CreatePageInput, UpdatePageInput, PublishStatus } from "./model.ts";
 import type { MulterFilesMap } from "./cloudinary.ts";
 
-/* ===== Typed Params ===== */
 interface PageIdParams {
   pageId: string;
 }
-interface EntityIdParams {
-  entityId: string;
-}
-interface SubmissionIdParams {
-  submissionId: string;
+
+interface SectionIdParams {
+  sectionId: string;
 }
 
-/* ===== Type guards ===== */
+/* ===== Response helpers ===== */
+
+function ok<T>(res: Response, data: T, message?: string, statusCode = 200): Response {
+  return res.status(statusCode).json({ success: true, message: message ?? "OK", data });
+}
+
+function fail(res: Response, message: string, statusCode = 400, error?: unknown): Response {
+  return res.status(statusCode).json({
+    success: false,
+    message,
+    error: error instanceof Error ? error.message : undefined,
+  });
+}
+
+/* ===== Guards ===== */
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -33,25 +36,14 @@ function isFilesMap(value: unknown): value is MulterFilesMap {
 
   for (const v of Object.values(value)) {
     if (!Array.isArray(v)) return false;
-
     for (const f of v) {
       if (!isPlainObject(f)) return false;
-
-      // minimal checks for multer memory storage file
-      if (!("buffer" in f) || !("mimetype" in f) || !("originalname" in f)) {
-        return false;
-      }
+      if (!("buffer" in f) || !("mimetype" in f) || !("originalname" in f)) return false;
     }
   }
-
   return true;
 }
 
-/**
- * Supports:
- * - JSON request: req.body is the payload
- * - multipart/form-data: req.body.data is JSON string
- */
 function getJsonPayload<P extends object, T>(req: Request<P>): T {
   const bodyUnknown: unknown = req.body;
 
@@ -68,11 +60,6 @@ function getJsonPayload<P extends object, T>(req: Request<P>): T {
   return req.body as T;
 }
 
-/**
- * Multer can populate req.files in multiple shapes.
- * We support the common `multer.fields()` shape:
- *   Record<string, File[]>
- */
 function getFiles<P extends object>(req: Request<P>): MulterFilesMap | undefined {
   const filesUnknown: unknown = (req as unknown as { files?: unknown }).files;
 
@@ -83,17 +70,16 @@ function getFiles<P extends object>(req: Request<P>): MulterFilesMap | undefined
 }
 
 export class ContentController {
-  /* ===================== PAGES ===================== */
+  /* ===================== DASHBOARD / ADMIN ===================== */
 
   static async createPage(req: Request, res: Response): Promise<Response> {
     try {
       const payload = getJsonPayload<object, CreatePageInput>(req);
       const files = getFiles<object>(req);
-
       const page = await ContentService.createPage(payload, files);
-      return res.status(201).json(page);
-    } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      return ok(res, page, "Page created", 201);
+    } catch (e: unknown) {
+      return fail(res, "Failed to create page", 400, e);
     }
   }
 
@@ -101,241 +87,128 @@ export class ContentController {
     try {
       const locale = req.query.locale as string | undefined;
       const status = req.query.status as PublishStatus | undefined;
-
       const pages = await ContentService.listPages({ locale, status });
-      return res.status(200).json(pages);
-    } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      return ok(res, pages, "Pages fetched");
+    } catch (e: unknown) {
+      return fail(res, "Failed to list pages", 400, e);
     }
   }
 
-  static async getPageById(
-    req: Request<PageIdParams>,
-    res: Response
-  ): Promise<Response> {
+  static async getPageById(req: Request<PageIdParams>, res: Response): Promise<Response> {
     try {
       const page = await ContentService.getPageById(req.params.pageId);
-      if (!page) return res.status(404).json({ message: "Page not found." });
-      return res.status(200).json(page);
-    } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      if (!page) return fail(res, "Page not found", 404);
+      return ok(res, page, "Page fetched");
+    } catch (e: unknown) {
+      return fail(res, "Failed to fetch page", 400, e);
     }
   }
 
-  static async getPageByPath(req: Request, res: Response): Promise<Response> {
+  static async updatePage(req: Request<PageIdParams>, res: Response): Promise<Response> {
+    try {
+      const patch = getJsonPayload<PageIdParams, UpdatePageInput>(req);
+      const files = getFiles<PageIdParams>(req);
+      const page = await ContentService.updatePage(req.params.pageId, patch, files);
+      return ok(res, page, "Page updated");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to update page";
+      const status = msg.toLowerCase().includes("not found") ? 404 : 400;
+      return fail(res, "Failed to update page", status, e);
+    }
+  }
+
+  static async publishPage(req: Request<PageIdParams>, res: Response): Promise<Response> {
+    try {
+      const page = await ContentService.publishPage(req.params.pageId);
+      return ok(res, page, "Page published");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to publish page";
+      const status = msg.toLowerCase().includes("not found") ? 404 : 400;
+      return fail(res, "Failed to publish page", status, e);
+    }
+  }
+
+  static async unpublishPage(req: Request<PageIdParams>, res: Response): Promise<Response> {
+    try {
+      const page = await ContentService.unpublishPage(req.params.pageId);
+      return ok(res, page, "Page unpublished");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to unpublish page";
+      const status = msg.toLowerCase().includes("not found") ? 404 : 400;
+      return fail(res, "Failed to unpublish page", status, e);
+    }
+  }
+
+  static async deletePage(req: Request<PageIdParams>, res: Response): Promise<Response> {
+    try {
+      await ContentService.deletePage(req.params.pageId);
+      return ok(res, null, "Page deleted");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to delete page";
+      const status = msg.toLowerCase().includes("not found") ? 404 : 400;
+      return fail(res, "Failed to delete page", status, e);
+    }
+  }
+
+  /* ===================== FRONTEND READS (PATH-BASED) ===================== */
+
+  static async resolvePageMeta(req: Request, res: Response): Promise<Response> {
     try {
       const path = (req.query.path as string | undefined) ?? "";
       const locale = req.query.locale as string | undefined;
 
-      const page = await ContentService.getPageByPath(path, locale);
-      if (!page) return res.status(404).json({ message: "Page not found." });
-      return res.status(200).json(page);
-    } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      const meta = await ContentService.getPageMetaByPath(path, locale);
+      if (!meta) return fail(res, "Page not found", 404);
+
+      return ok(res, meta, "Page meta fetched");
+    } catch (e: unknown) {
+      return fail(res, "Failed to resolve page meta", 400, e);
     }
   }
 
-  static async updatePage(
-    req: Request<PageIdParams>,
-    res: Response
-  ): Promise<Response> {
+  static async resolvePageSections(req: Request, res: Response): Promise<Response> {
     try {
-      const patch = getJsonPayload<PageIdParams, UpdatePageInput>(req);
-      const files = getFiles<PageIdParams>(req);
-
-      const page = await ContentService.updatePage(req.params.pageId, patch, files);
-      return res.status(200).json(page);
-    } catch (error: unknown) {
-      const message = (error as Error).message;
-      const status = message.toLowerCase().includes("not found") ? 404 : 400;
-      return res.status(status).json({ message });
-    }
-  }
-
-  static async publishPage(
-    req: Request<PageIdParams>,
-    res: Response
-  ): Promise<Response> {
-    try {
-      const page = await ContentService.publishPage(req.params.pageId);
-      return res.status(200).json(page);
-    } catch (error: unknown) {
-      const message = (error as Error).message;
-      const status = message.toLowerCase().includes("not found") ? 404 : 400;
-      return res.status(status).json({ message });
-    }
-  }
-
-  static async unpublishPage(
-    req: Request<PageIdParams>,
-    res: Response
-  ): Promise<Response> {
-    try {
-      const page = await ContentService.unpublishPage(req.params.pageId);
-      return res.status(200).json(page);
-    } catch (error: unknown) {
-      const message = (error as Error).message;
-      const status = message.toLowerCase().includes("not found") ? 404 : 400;
-      return res.status(status).json({ message });
-    }
-  }
-
-  static async deletePage(
-    req: Request<PageIdParams>,
-    res: Response
-  ): Promise<Response> {
-    try {
-      await ContentService.deletePage(req.params.pageId);
-      return res.status(204).send();
-    } catch (error: unknown) {
-      const message = (error as Error).message;
-      const status = message.toLowerCase().includes("not found") ? 404 : 400;
-      return res.status(status).json({ message });
-    }
-  }
-
-  /* ===================== ENTITIES ===================== */
-
-  static async createEntity(req: Request, res: Response): Promise<Response> {
-    try {
-      const payload = getJsonPayload<object, CreateEntityInput>(req);
-      const files = getFiles<object>(req);
-
-      const entity = await ContentService.createEntity(payload, files);
-      return res.status(201).json(entity);
-    } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
-    }
-  }
-
-  static async listEntities(req: Request, res: Response): Promise<Response> {
-    try {
-      const locale = req.query.locale as string | undefined;
-      const status = req.query.status as PublishStatus | undefined;
-      const entity_type = req.query.entity_type as string | undefined;
-
-      const entities = await ContentService.listEntities({ locale, status, entity_type });
-      return res.status(200).json(entities);
-    } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
-    }
-  }
-
-  static async getEntityById(
-    req: Request<EntityIdParams>,
-    res: Response
-  ): Promise<Response> {
-    try {
-      const entity = await ContentService.getEntityById(req.params.entityId);
-      if (!entity) return res.status(404).json({ message: "Entity not found." });
-      return res.status(200).json(entity);
-    } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
-    }
-  }
-
-  static async getEntityByKey(req: Request, res: Response): Promise<Response> {
-    try {
-      const key = (req.query.key as string | undefined) ?? "";
+      const path = (req.query.path as string | undefined) ?? "";
       const locale = req.query.locale as string | undefined;
 
-      const entity = await ContentService.getEntityByKey(key, locale);
-      if (!entity) return res.status(404).json({ message: "Entity not found." });
-      return res.status(200).json(entity);
-    } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      const sections = await ContentService.getPageSectionsByPath(path, locale);
+      if (sections === null) return fail(res, "Page not found", 404);
+
+      return ok(res, sections, "Sections fetched");
+    } catch (e: unknown) {
+      return fail(res, "Failed to resolve sections", 400, e);
     }
   }
 
-  static async updateEntity(
-    req: Request<EntityIdParams>,
+  static async resolvePageSectionById(
+    req: Request<SectionIdParams>,
     res: Response
   ): Promise<Response> {
     try {
-      const patch = getJsonPayload<EntityIdParams, UpdateEntityInput>(req);
-      const files = getFiles<EntityIdParams>(req);
+      const path = (req.query.path as string | undefined) ?? "";
+      const locale = req.query.locale as string | undefined;
 
-      const entity = await ContentService.updateEntity(req.params.entityId, patch, files);
-      return res.status(200).json(entity);
-    } catch (error: unknown) {
-      const message = (error as Error).message;
-      const status = message.toLowerCase().includes("not found") ? 404 : 400;
-      return res.status(status).json({ message });
+      const section = await ContentService.getPageSectionById(path, locale, req.params.sectionId);
+      if (!section) return fail(res, "Section not found", 404);
+
+      return ok(res, section, "Section fetched");
+    } catch (e: unknown) {
+      return fail(res, "Failed to resolve section", 400, e);
     }
   }
 
-  static async deleteEntity(
-    req: Request<EntityIdParams>,
-    res: Response
-  ): Promise<Response> {
+  static async resolvePageSectionsByType(req: Request, res: Response): Promise<Response> {
     try {
-      await ContentService.deleteEntity(req.params.entityId);
-      return res.status(204).send();
-    } catch (error: unknown) {
-      const message = (error as Error).message;
-      const status = message.toLowerCase().includes("not found") ? 404 : 400;
-      return res.status(status).json({ message });
-    }
-  }
+      const path = (req.query.path as string | undefined) ?? "";
+      const locale = req.query.locale as string | undefined;
+      const type = (req.query.type as string | undefined) ?? "";
 
-  /* ===================== FORMS ===================== */
+      const sections = await ContentService.getPageSectionsByType(path, locale, type);
+      if (sections === null) return fail(res, "Page not found", 404);
 
-  static async createSubmission(req: Request, res: Response): Promise<Response> {
-    try {
-      const payload = req.body as CreateSubmissionInput;
-      const submission = await ContentService.createSubmission(payload);
-      return res.status(201).json(submission);
-    } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
-    }
-  }
-
-  static async listSubmissions(req: Request, res: Response): Promise<Response> {
-    try {
-      const page_id = req.query.page_id as string | undefined;
-      const form_key = req.query.form_key as string | undefined;
-
-      const submissions = await ContentService.listSubmissions({ page_id, form_key });
-      return res.status(200).json(submissions);
-    } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
-    }
-  }
-
-  static async getSubmissionById(
-    req: Request<SubmissionIdParams>,
-    res: Response
-  ): Promise<Response> {
-    try {
-      const submission = await ContentService.getSubmissionById(req.params.submissionId);
-      if (!submission) return res.status(404).json({ message: "Submission not found." });
-      return res.status(200).json(submission);
-    } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
-    }
-  }
-
-  /* ===================== EVENTS ===================== */
-
-  static async createEvent(req: Request, res: Response): Promise<Response> {
-    try {
-      const payload = req.body as CreateEventInput;
-      const event = await ContentService.createEvent(payload);
-      return res.status(201).json(event);
-    } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
-    }
-  }
-
-  static async listEvents(req: Request, res: Response): Promise<Response> {
-    try {
-      const page_id = req.query.page_id as string | undefined;
-      const event_type = req.query.event_type as string | undefined;
-
-      const events = await ContentService.listEvents({ page_id, event_type });
-      return res.status(200).json(events);
-    } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      return ok(res, sections, "Sections by type fetched");
+    } catch (e: unknown) {
+      return fail(res, "Failed to resolve sections by type", 400, e);
     }
   }
 }
