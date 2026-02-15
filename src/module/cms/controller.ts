@@ -1,13 +1,6 @@
-// =====================================================
-// CMS MODULE - CONTROLLER (HTTP Layer)
-// Handles HTTP requests/responses with structured format
-// =====================================================
-
 import type { Request, Response } from 'express';
-import { ThemeService, PageContentService, PageMetaService, TeamMemberService } from './service.ts';
+import { PageContentService, PageMetaService, TeamMemberService } from './service.ts';
 import type {
-  CreateThemeInput,
-  UpdateThemeInput,
   CreatePageContentInput,
   UpdatePageContentInput,
   PageContentFilters,
@@ -17,287 +10,6 @@ import type {
   UpdateTeamMemberInput,
   MulterFile,
 } from './types.ts';
-
-// =====================================================
-// THEME CONTROLLER
-// =====================================================
-
-export class ThemeController {
-  /**
-   * GET /api/cms/theme/active - Get active theme (Frontend)
-   */
-  static async getActiveTheme(req: Request, res: Response): Promise<void> {
-    try {
-      const theme = await ThemeService.getActiveTheme();
-
-      if (!theme) {
-        res.status(404).json({
-          success: false,
-          error: 'No active theme found',
-        });
-        return;
-      }
-
-      res.status(200).json({
-        success: true,
-        data: {
-          theme,
-        },
-      });
-    } catch (error) {
-      console.error('Error getting active theme:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to get active theme',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  }
-
-  /**
-   * GET /api/cms/theme - Get all themes (Admin)
-   */
-  static async getAllThemes(req: Request, res: Response): Promise<void> {
-    try {
-      const themes = await ThemeService.getAllThemes();
-
-      res.status(200).json({
-        success: true,
-        data: {
-          themes,
-          count: themes.length,
-        },
-      });
-    } catch (error) {
-      console.error('Error getting themes:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to get themes',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  }
-
-  /**
-   * GET /api/cms/theme/:id - Get theme by ID
-   */
-  static async getThemeById(req: Request, res: Response): Promise<void> {
-    try {
-      const { id } = req.params;
-
-      if (!id) {
-        res.status(400).json({
-          success: false,
-          error: 'Theme ID is required',
-        });
-        return;
-      }
-
-      const theme = await ThemeService.getThemeById(id);
-
-      res.status(200).json({
-        success: true,
-        data: {
-          theme,
-        },
-      });
-    } catch (error) {
-      console.error('Error getting theme:', error);
-
-      if (error instanceof Error && error.message === 'Theme not found') {
-        res.status(404).json({
-          success: false,
-          error: 'Theme not found',
-        });
-        return;
-      }
-
-      res.status(500).json({
-        success: false,
-        error: 'Failed to get theme',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  }
-
-  /**
-   * POST /api/cms/theme - Create theme
-   */
-  static async createTheme(req: Request, res: Response): Promise<void> {
-    try {
-      const { theme_name, colors, typography, spacing, is_active } = req.body;
-
-      if (!theme_name || !colors || !typography) {
-        res.status(400).json({
-          success: false,
-          error: 'Missing required fields: theme_name, colors, typography',
-        });
-        return;
-      }
-
-      const input: CreateThemeInput = {
-        theme_name,
-        colors,
-        typography,
-        spacing,
-        is_active: is_active ?? false,
-      };
-
-      const theme = await ThemeService.createTheme(input);
-
-      res.status(201).json({
-        success: true,
-        data: {
-          theme,
-        },
-        message: 'Theme created successfully',
-      });
-    } catch (error) {
-      console.error('Error creating theme:', error);
-      res.status(500).json({
-        success: false,
-        error: 'Failed to create theme',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  }
-
-  /**
-   * PUT /api/cms/theme/:id - Update theme
-   */
-  static async updateTheme(req: Request, res: Response): Promise<void> {
-    try {
-      const { id } = req.params;
-      const { theme_name, colors, typography, spacing, is_active } = req.body;
-
-      if (!id) {
-        res.status(400).json({
-          success: false,
-          error: 'Theme ID is required',
-        });
-        return;
-      }
-
-      const input: UpdateThemeInput = {
-        id,
-        theme_name,
-        colors,
-        typography,
-        spacing,
-        is_active,
-      };
-
-      const theme = await ThemeService.updateTheme(input);
-
-      res.status(200).json({
-        success: true,
-        data: {
-          theme,
-        },
-        message: 'Theme updated successfully',
-      });
-    } catch (error) {
-      console.error('Error updating theme:', error);
-
-      if (error instanceof Error && error.message === 'Theme not found') {
-        res.status(404).json({
-          success: false,
-          error: 'Theme not found',
-        });
-        return;
-      }
-
-      res.status(500).json({
-        success: false,
-        error: 'Failed to update theme',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  }
-
-  /**
-   * DELETE /api/cms/theme/:id - Delete theme
-   */
-  static async deleteTheme(req: Request, res: Response): Promise<void> {
-    try {
-      const { id } = req.params;
-
-      if (!id) {
-        res.status(400).json({
-          success: false,
-          error: 'Theme ID is required',
-        });
-        return;
-      }
-
-      await ThemeService.deleteTheme(id);
-
-      res.status(200).json({
-        success: true,
-        message: 'Theme deleted successfully',
-      });
-    } catch (error) {
-      console.error('Error deleting theme:', error);
-
-      if (error instanceof Error && error.message === 'Theme not found') {
-        res.status(404).json({
-          success: false,
-          error: 'Theme not found',
-        });
-        return;
-      }
-
-      res.status(500).json({
-        success: false,
-        error: 'Failed to delete theme',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  }
-
-  /**
-   * POST /api/cms/theme/:id/activate - Activate theme
-   */
-  static async activateTheme(req: Request, res: Response): Promise<void> {
-    try {
-      const { id } = req.params;
-
-      if (!id) {
-        res.status(400).json({
-          success: false,
-          error: 'Theme ID is required',
-        });
-        return;
-      }
-
-      const theme = await ThemeService.activateTheme(id);
-
-      res.status(200).json({
-        success: true,
-        data: {
-          theme,
-        },
-        message: 'Theme activated successfully',
-      });
-    } catch (error) {
-      console.error('Error activating theme:', error);
-
-      if (error instanceof Error && error.message === 'Theme not found') {
-        res.status(404).json({
-          success: false,
-          error: 'Theme not found',
-        });
-        return;
-      }
-
-      res.status(500).json({
-        success: false,
-        error: 'Failed to activate theme',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  }
-}
 
 // =====================================================
 // PAGE CONTENT CONTROLLER
@@ -937,7 +649,7 @@ export class TeamMemberController {
    */
   static async createMember(req: Request, res: Response): Promise<void> {
     try {
-      const { full_name, role, bio, linkedin_url, email, display_order, is_active } = req.body;
+      const { full_name, role, contribution, joined, email, display_order, is_active } = req.body;
 
       if (!full_name || !role) {
         res.status(400).json({
@@ -950,8 +662,8 @@ export class TeamMemberController {
       const input: CreateTeamMemberInput = {
         full_name,
         role,
-        bio: bio || null,
-        linkedin_url: linkedin_url || null,
+        contribution: contribution || null,
+        joined: joined || null,
         email: email || null,
         display_order: display_order ?? 0,
         is_active: is_active ?? true,
@@ -983,7 +695,7 @@ export class TeamMemberController {
   static async updateMember(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const { full_name, role, bio, linkedin_url, email, display_order, is_active } = req.body;
+      const { full_name, role, contribution, joined, email, display_order, is_active } = req.body;
 
       if (!id) {
         res.status(400).json({
@@ -997,8 +709,8 @@ export class TeamMemberController {
         id,
         full_name,
         role,
-        bio: bio !== undefined ? bio : undefined,
-        linkedin_url: linkedin_url !== undefined ? linkedin_url : undefined,
+        contribution: contribution !== undefined ? contribution : undefined,
+        joined: joined !== undefined ? joined : undefined,
         email: email !== undefined ? email : undefined,
         display_order,
         is_active,

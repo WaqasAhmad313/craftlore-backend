@@ -1,10 +1,6 @@
 import { v2 as cloudinary } from 'cloudinary';
 import type { MulterFile } from './types.ts';
 
-// =====================================================
-// CONFIGURATION
-// =====================================================
-
 const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
 const apiKey = process.env.CLOUDINARY_API_KEY;
 const apiSecret = process.env.CLOUDINARY_API_SECRET;
@@ -19,17 +15,9 @@ cloudinary.config({
   api_secret: apiSecret,
 });
 
-// =====================================================
-// UPLOAD OPTIONS INTERFACE
-// =====================================================
-
 interface UploadOptions {
   folder: string;
 }
-
-// =====================================================
-// SINGLE FILE UPLOAD FUNCTION
-// =====================================================
 
 async function uploadSingleFile(
   file: MulterFile,
@@ -57,10 +45,6 @@ async function uploadSingleFile(
       .end(file.buffer);
   });
 }
-
-// =====================================================
-// CMS IMAGE UPLOADER CLASS
-// =====================================================
 
 export class CMSImageUploader {
   /**

@@ -1,59 +1,4 @@
 // =====================================================
-// GLOBAL THEME TYPES
-// =====================================================
-
-export interface ThemeColors {
-  primary: Record<string, string>;
-  secondary: Record<string, string>;
-  accent: Record<string, string>;
-  neutral: Record<string, string>;
-  success: { light: string; DEFAULT: string; dark: string };
-  warning: { light: string; DEFAULT: string; dark: string };
-  error: { light: string; DEFAULT: string; dark: string };
-  info: { light: string; DEFAULT: string; dark: string };
-}
-
-export interface ThemeTypography {
-  fontFamily: { sans: string; serif: string; mono: string; display: string };
-  fontSize: Record<string, { size: string; lineHeight: string }>;
-  fontWeight: Record<string, string>;
-  letterSpacing: Record<string, string>;
-  lineHeight: Record<string, string>;
-}
-
-export interface ThemeSpacing {
-  [key: string]: string;
-}
-
-export interface GlobalTheme {
-  id: string;
-  theme_name: string;
-  colors: ThemeColors;
-  typography: ThemeTypography;
-  spacing: ThemeSpacing | null;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CreateThemeInput {
-  theme_name: string;
-  colors: ThemeColors;
-  typography: ThemeTypography;
-  spacing?: ThemeSpacing;
-  is_active: boolean;
-}
-
-export interface UpdateThemeInput {
-  id: string;
-  theme_name?: string;
-  colors?: ThemeColors;
-  typography?: ThemeTypography;
-  spacing?: ThemeSpacing | null;
-  is_active?: boolean;
-}
-
-// =====================================================
 // PAGE CONTENT TYPES
 // =====================================================
 
@@ -159,9 +104,9 @@ export interface TeamMember {
   id: string;
   full_name: string;
   role: string;
-  bio: string | null;
+  contribution: string | null;
   profile_image_url: string | null;
-  linkedin_url: string | null;
+  joined: string | null;
   email: string | null;
   display_order: number;
   is_active: boolean;
@@ -172,9 +117,9 @@ export interface TeamMember {
 export interface CreateTeamMemberInput {
   full_name: string;
   role: string;
-  bio?: string | null;
+  contribution?: string | null;
   profile_image_url?: string | null;
-  linkedin_url?: string | null;
+  joined?: string | null;
   email?: string | null;
   display_order: number;
   is_active: boolean;
@@ -184,9 +129,9 @@ export interface UpdateTeamMemberInput {
   id: string;
   full_name?: string;
   role?: string;
-  bio?: string | null;
+  contribution?: string | null;
   profile_image_url?: string | null;
-  linkedin_url?: string | null;
+  joined?: string | null;
   email?: string | null;
   display_order?: number;
   is_active?: boolean;

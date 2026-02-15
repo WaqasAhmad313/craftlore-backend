@@ -1,8 +1,5 @@
 import { db } from '../../config/db.ts';
 import type {
-  GlobalTheme,
-  CreateThemeInput,
-  UpdateThemeInput,
   PageContent,
   CreatePageContentInput,
   UpdatePageContentInput,
@@ -14,148 +11,6 @@ import type {
   CreateTeamMemberInput,
   UpdateTeamMemberInput,
 } from './types.ts';
-
-// =====================================================
-// GLOBAL THEME MODEL
-// =====================================================
-
-export class ThemeModel {
-  /**
-   * Get active theme (for frontend)
-   */
-  static async getActive(): Promise<GlobalTheme | null> {
-    const query = `SELECT * FROM content.global_theme WHERE is_active = true LIMIT 1`;
-    const result = await db.query<GlobalTheme>(query);
-    return result.rows[0] || null;
-  }
-
-  /**
-   * Get all themes (for admin)
-   */
-  static async getAll(): Promise<GlobalTheme[]> {
-    const query = `SELECT * FROM content.global_theme ORDER BY created_at DESC`;
-    const result = await db.query<GlobalTheme>(query);
-    return result.rows;
-  }
-
-  /**
-   * Get theme by ID
-   */
-  static async getById(id: string): Promise<GlobalTheme | null> {
-    const query = `SELECT * FROM content.global_theme WHERE id = $1`;
-    const result = await db.query<GlobalTheme>(query, [id]);
-    return result.rows[0] || null;
-  }
-
-  /**
-   * Check if theme name exists
-   */
-  static async existsByName(themeName: string, excludeId?: string): Promise<boolean> {
-    let query = `SELECT EXISTS(SELECT 1 FROM content.global_theme WHERE theme_name = $1`;
-    const values: string[] = [themeName];
-
-    if (excludeId) {
-      query += ` AND id != $2`;
-      values.push(excludeId);
-    }
-
-    query += `) as exists`;
-
-    const result = await db.query<{ exists: boolean }>(query, values);
-    return result.rows[0]?.exists || false;
-  }
-
-  /**
-   * Create theme
-   */
-  static async create(input: CreateThemeInput): Promise<GlobalTheme> {
-    const query = `
-      INSERT INTO content.global_theme (theme_name, colors, typography, spacing, is_active)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *
-    `;
-
-    const values = [
-      input.theme_name,
-      JSON.stringify(input.colors),
-      JSON.stringify(input.typography),
-      input.spacing ? JSON.stringify(input.spacing) : null,
-      input.is_active,
-    ];
-
-    const result = await db.query<GlobalTheme>(query, values);
-
-    if (!result.rows[0]) {
-      throw new Error('Failed to create theme');
-    }
-
-    return result.rows[0];
-  }
-
-  /**
-   * Update theme
-   */
-  static async update(input: UpdateThemeInput): Promise<GlobalTheme> {
-    const current = await this.getById(input.id);
-
-    if (!current) {
-      throw new Error('Theme not found');
-    }
-
-    const query = `
-      UPDATE content.global_theme
-      SET theme_name = $1, colors = $2, typography = $3, spacing = $4, is_active = $5, updated_at = NOW()
-      WHERE id = $6
-      RETURNING *
-    `;
-
-    const values = [
-      input.theme_name ?? current.theme_name,
-      input.colors ? JSON.stringify(input.colors) : JSON.stringify(current.colors),
-      input.typography ? JSON.stringify(input.typography) : JSON.stringify(current.typography),
-      input.spacing !== undefined ? (input.spacing ? JSON.stringify(input.spacing) : null) : (current.spacing ? JSON.stringify(current.spacing) : null),
-      input.is_active ?? current.is_active,
-      input.id,
-    ];
-
-    const result = await db.query<GlobalTheme>(query, values);
-
-    if (!result.rows[0]) {
-      throw new Error('Failed to update theme');
-    }
-
-    return result.rows[0];
-  }
-
-  /**
-   * Delete theme
-   */
-  static async delete(id: string): Promise<boolean> {
-    const query = `DELETE FROM content.global_theme WHERE id = $1 RETURNING id`;
-    const result = await db.query(query, [id]);
-    return result.rows.length > 0;
-  }
-
-  /**
-   * Activate theme (trigger auto-deactivates others)
-   */
-  static async activate(id: string): Promise<GlobalTheme> {
-    const query = `
-      UPDATE content.global_theme
-      SET is_active = true, updated_at = NOW()
-      WHERE id = $1
-      RETURNING *
-    `;
-
-    const result = await db.query<GlobalTheme>(query, [id]);
-
-    if (!result.rows[0]) {
-      throw new Error('Theme not found');
-    }
-
-    return result.rows[0];
-  }
-}
 
 // =====================================================
 // PAGE CONTENT MODEL
@@ -519,7 +374,7 @@ export class TeamMemberModel {
   static async create(input: CreateTeamMemberInput): Promise<TeamMember> {
     const query = `
       INSERT INTO content.team_members (
-        full_name, role, bio, profile_image_url, linkedin_url, email, display_order, is_active
+        full_name, role, contribution, profile_image_url, joined, email, display_order, is_active
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
@@ -528,9 +383,9 @@ export class TeamMemberModel {
     const values = [
       input.full_name,
       input.role,
-      input.bio ?? null,
+      input.contribution ?? null,
       input.profile_image_url ?? null,
-      input.linkedin_url ?? null,
+      input.joined ?? null,
       input.email ?? null,
       input.display_order,
       input.is_active,
@@ -557,8 +412,8 @@ export class TeamMemberModel {
 
     const query = `
       UPDATE content.team_members
-      SET full_name = $1, role = $2, bio = $3, profile_image_url = $4,
-          linkedin_url = $5, email = $6, display_order = $7, is_active = $8, updated_at = NOW()
+      SET full_name = $1, role = $2, contribution = $3, profile_image_url = $4,
+          joined = $5, email = $6, display_order = $7, is_active = $8, updated_at = NOW()
       WHERE id = $9
       RETURNING *
     `;
@@ -566,9 +421,9 @@ export class TeamMemberModel {
     const values = [
       input.full_name ?? current.full_name,
       input.role ?? current.role,
-      input.bio !== undefined ? input.bio : current.bio,
+      input.contribution !== undefined ? input.contribution : current.contribution,
       input.profile_image_url !== undefined ? input.profile_image_url : current.profile_image_url,
-      input.linkedin_url !== undefined ? input.linkedin_url : current.linkedin_url,
+      input.joined !== undefined ? input.joined : current.joined,
       input.email !== undefined ? input.email : current.email,
       input.display_order ?? current.display_order,
       input.is_active ?? current.is_active,

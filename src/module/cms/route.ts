@@ -1,20 +1,8 @@
 import { Router } from 'express';
-import { ThemeController, PageContentController, PageMetaController, TeamMemberController } from './controller.ts';
+import { PageContentController, PageMetaController, TeamMemberController } from './controller.ts';
 import { uploadProfileImage, uploadContentImages, uploadMetaImages } from './multer.ts';
 
 const router = Router();
-
-// Frontend route - get active theme
-router.get('/theme/active', ThemeController.getActiveTheme);
-
-// Admin routes - theme management
-router.get('/theme', ThemeController.getAllThemes);
-router.post('/theme', ThemeController.createTheme);
-router.post('/theme/:id/activate', ThemeController.activateTheme); // BEFORE /:id
-router.get('/theme/:id', ThemeController.getThemeById);
-router.put('/theme/:id', ThemeController.updateTheme);
-router.delete('/theme/:id', ThemeController.deleteTheme);
-
 // Frontend route - get content by page slug
 router.get('/content/page/:pageSlug', PageContentController.getContentByPage);
 

@@ -19,6 +19,7 @@ import ambassadorRoute from "./module/ambassador/route.ts";
 import carbonRoute from "./module/carbon_footprint/route.ts";
 import caisRoutes from "./module/cais/index.ts";
 import cmsRoute from "./module/cms/route.ts";
+import mailerRoute from "./module/mailer/route.ts";
 
 const app: Application = express();
 
@@ -46,6 +47,7 @@ app.use("/api/evaluations", evaluation);
 app.use("/api/auth", authRoute);
 app.use("/api/blacklist", blacklist);
 app.use("/api", counterfeitReportRoutes);
+app.use("/api/mail", mailerRoute);
 app.use("/api/heroes", heroRoutes);
 app.use("/api/gi-crafts", giRoute);
 app.use("/api/craft-entities", entityApplicationRoutes);
