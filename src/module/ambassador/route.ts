@@ -2,40 +2,21 @@ import { Router } from "express";
 import { AmbassadorController, AdminController } from "./controller.ts";
 import { authenticate } from "../../middleware/auth.ts";
 import { requireAdmin } from "../../middleware/requireAdmin.ts";
-import { optionalAuthenticate } from "../../middleware/optionalAuth.ts";
 
 const router = Router();
 
-/**
- * GET /api/ambassadors/me
- * Get current user's ambassador data (profile + stories)
- */
+// Get current user's ambassador data (profile + stories)
+
 router.get("/ambassadors/me", authenticate, AmbassadorController.getMyData);
 
-/* ===== PUBLIC ROUTES (2) ===== */
-
-/**
- * GET /api/ambassadors
- * Get list of ambassadors or stories
- * Query params:
- *  - view: "profiles" | "stories" (default: profiles)
- *  - page: number (default: 1)
- *  - limit: number (default: 20)
- *  - search: string (optional)
- *  - filter: "all" | "featured" (default: all)
- *  - sort: "newest" | "most_active" | "most_liked" | "most_shared" (default: newest)
- *  - ambassador_id: string (optional, for filtering stories by ambassador)
- */
+// Get list of ambassadors or stories
+ 
 router.get("/ambassadors", AmbassadorController.list);
 
-/**
- * GET /api/ambassadors/:id
- * Get single ambassador or story (auto-detects type)
- * Auth: Optional (if authenticated, includes user_liked status for stories)
- */
+// Get single ambassador or story (auto-detects type)
+
 router.get("/ambassadors/:id", AmbassadorController.getSingle);
 
-/* ===== AUTHENTICATED ROUTES (5) ===== */
 
 /**
  * POST /api/ambassadors/profile
@@ -51,7 +32,7 @@ router.get("/ambassadors/:id", AmbassadorController.getSingle);
 router.post(
   "/ambassadors/profile",
   authenticate,
-  AmbassadorController.createOrUpdateProfile
+  AmbassadorController.createOrUpdateProfile,
 );
 
 /**
@@ -68,7 +49,7 @@ router.post(
 router.post(
   "/ambassadors/stories",
   authenticate,
-  AmbassadorController.createStory
+  AmbassadorController.createStory,
 );
 
 /**
@@ -82,7 +63,7 @@ router.post(
 router.put(
   "/ambassadors/stories/:storyId",
   authenticate,
-  AmbassadorController.editStory
+  AmbassadorController.editStory,
 );
 
 /**
@@ -96,8 +77,7 @@ router.put(
  */
 router.post(
   "/ambassadors/stories/:storyId/interact",
-  optionalAuthenticate,
-  AmbassadorController.interact
+  AmbassadorController.interact,
 );
 
 /* ===== ADMIN ROUTES (2) ===== */
@@ -119,7 +99,7 @@ router.get(
   "/admin/ambassadors",
   authenticate,
   requireAdmin,
-  AdminController.getDashboard
+  AdminController.getDashboard,
 );
 
 /**
@@ -132,7 +112,7 @@ router.delete(
   "/admin/ambassadors/:id",
   authenticate,
   requireAdmin,
-  AdminController.delete
+  AdminController.delete,
 );
 
 export default router;

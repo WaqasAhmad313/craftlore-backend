@@ -6,7 +6,11 @@ import {
 } from "./model.ts";
 import { logger } from "../../util/logger.ts";
 import { Mailer } from "../../util/mailer.ts";
-import { generateAccessToken, generateRefreshToken } from "../../util/token.ts";
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  durationToMs,
+} from "../../util/token.ts";
 import {
   hashPassword,
   comparePassword,
@@ -28,6 +32,16 @@ export interface LoginData {
 
 export class AuthService {
   private static CODE_EXPIRY_MINUTES = 10;
+
+  private static getRefreshExpiryDate(): Date {
+    const ms = durationToMs(env.JWT_REFRESH_EXPIRES); // e.g. "30d"
+    if (!ms) {
+      // sane fallback if env is missing/invalid
+      return new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    }
+    return new Date(Date.now() + ms);
+  }
+
   static async signupWithEmail(data: SignupData): Promise<User> {
     const existing = await UserModel.findByEmail(data.email);
     if (existing) {
@@ -42,7 +56,7 @@ export class AuthService {
       role: "user",
     });
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
     const codeHash = await hashCode(code);
     const expiresAt = new Date(
       Date.now() + this.CODE_EXPIRY_MINUTES * 60 * 1000,
@@ -64,25 +78,21 @@ export class AuthService {
   static async loginAdmin(
     data: LoginData,
   ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
-    // Only fetch admins
     const user = await UserModel.findAdminByEmail(data.email);
     if (!user) throw new Error("Invalid credentials");
-
     if (!user.password_hash) throw new Error("Invalid credentials");
 
     const match = await comparePassword(data.password, user.password_hash);
     if (!match) throw new Error("Invalid credentials");
 
-    // Issue tokens with admin role inside JWT
     const accessToken = generateAccessToken({ sub: user.id, role: user.role });
     const refreshTokenStr = generateRefreshToken({ sub: user.id });
 
-    const refreshExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const refreshExpires = this.getRefreshExpiryDate();
     await RefreshTokenModel.create(user.id, refreshTokenStr, refreshExpires);
 
     return { user, accessToken, refreshToken: refreshTokenStr };
   }
-
 
   static async verifyEmail(userId: string, code: string): Promise<boolean> {
     const record = await EmailVerificationModel.findLatest(userId);
@@ -91,13 +101,9 @@ export class AuthService {
     const isValid = await compareHash(code, record.code_hash);
     if (!isValid) throw new Error("Invalid verification code");
 
-    if (record.expires_at.getTime() < Date.now())
-      throw new Error("Code expired");
+    if (record.expires_at.getTime() < Date.now()) throw new Error("Code expired");
 
-    // mark user as verified
     await UserModel.update(userId, { email_verified: true });
-
-    // remove all verification codes for this user
     await EmailVerificationModel.deleteByUser(userId);
 
     return true;
@@ -116,8 +122,8 @@ export class AuthService {
 
     const accessToken = generateAccessToken({ sub: user.id, role: user.role });
     const refreshTokenStr = generateRefreshToken({ sub: user.id });
-    const refreshExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
+    const refreshExpires = this.getRefreshExpiryDate();
     await RefreshTokenModel.create(user.id, refreshTokenStr, refreshExpires);
 
     return { user, accessToken, refreshToken: refreshTokenStr };
@@ -142,8 +148,8 @@ export class AuthService {
 
     const accessToken = generateAccessToken({ sub: user.id, role: user.role });
     const refreshTokenStr = generateRefreshToken({ sub: user.id });
-    const refreshExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
+    const refreshExpires = this.getRefreshExpiryDate();
     await RefreshTokenModel.create(user.id, refreshTokenStr, refreshExpires);
 
     return { user, accessToken, refreshToken: refreshTokenStr };
@@ -162,8 +168,8 @@ export class AuthService {
 
     const accessToken = generateAccessToken({ sub: user.id, role: user.role });
     const refreshTokenStr = generateRefreshToken({ sub: user.id });
-    const refreshExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
+    const refreshExpires = this.getRefreshExpiryDate();
     await RefreshTokenModel.create(user.id, refreshTokenStr, refreshExpires);
 
     return { accessToken, refreshToken: refreshTokenStr };
@@ -189,23 +195,15 @@ export class AuthService {
     };
 
     const qs = new URLSearchParams(options);
-    const authUrl = `${rootUrl}?${qs.toString()}`;
-
-    console.log("🔍 Google Auth URL:", authUrl);
-    console.log("🔍 Redirect URI:", `${env.APP_URL}/api/auth/google/callback`);
-
-    return authUrl;
+    return `${rootUrl}?${qs.toString()}`;
   }
 
   static async handleGoogleCallback(
     code: string,
   ): Promise<{ user: User; accessToken: string; refreshToken: string }> {
-    // Exchange authorization code for tokens
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         code,
         client_id: env.GOOGLE_CLIENT_ID,
@@ -226,13 +224,10 @@ export class AuthService {
       id_token: string;
     };
 
-    // Get user info from Google
     const userInfoResponse = await fetch(
       "https://www.googleapis.com/oauth2/v2/userinfo",
       {
-        headers: {
-          Authorization: `Bearer ${tokens.access_token}`,
-        },
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
       },
     );
 
@@ -251,11 +246,6 @@ export class AuthService {
       picture: string;
     };
 
-    // Use existing loginWithGoogle method
-    return this.loginWithGoogle(
-      googleUser.id,
-      googleUser.name,
-      googleUser.email,
-    );
+    return this.loginWithGoogle(googleUser.id, googleUser.name, googleUser.email);
   }
 }

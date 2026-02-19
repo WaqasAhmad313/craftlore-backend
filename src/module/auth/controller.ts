@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { AuthService, type SignupData, type LoginData } from "./service.ts";
 import { logger } from "../../util/logger.ts";
+import { setAuthCookies, clearAuthCookies } from "../../util/token.ts";
 
 export class AuthController {
   static async signup(req: Request, res: Response) {
@@ -35,7 +36,22 @@ export class AuthController {
 
       const tokens = await AuthService.loginAdmin(data);
 
-      return res.status(200).json(tokens);
+      // ✅ cookie-based auth
+      setAuthCookies(res, {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      });
+
+      // optional: readable user cookie (your googleCallback already does this pattern)
+      res.cookie("user", JSON.stringify(tokens.user), {
+        httpOnly: false,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        path: "/",
+      });
+
+      return res.status(200).json({ user: tokens.user });
     } catch (error: any) {
       logger.error("AuthController.adminLogin failed", {
         error: error.message,
@@ -43,7 +59,6 @@ export class AuthController {
       return res.status(401).json({ error: "Invalid admin credentials" });
     }
   }
-
 
   static async verifyEmail(req: Request, res: Response) {
     try {
@@ -72,7 +87,22 @@ export class AuthController {
       }
 
       const tokens = await AuthService.loginWithEmail(data);
-      return res.status(200).json(tokens);
+
+      // ✅ cookie-based auth
+      setAuthCookies(res, {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      });
+
+      res.cookie("user", JSON.stringify(tokens.user), {
+        httpOnly: false,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        path: "/",
+      });
+
+      return res.status(200).json({ user: tokens.user });
     } catch (error: any) {
       logger.error("AuthController.login failed", { error: error.message });
       return res.status(400).json({ error: error.message });
@@ -89,7 +119,22 @@ export class AuthController {
       }
 
       const tokens = await AuthService.loginWithGoogle(googleId, name, email);
-      return res.status(200).json(tokens);
+
+      // ✅ cookie-based auth
+      setAuthCookies(res, {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      });
+
+      res.cookie("user", JSON.stringify(tokens.user), {
+        httpOnly: false,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        path: "/",
+      });
+
+      return res.status(200).json({ user: tokens.user });
     } catch (error: any) {
       logger.error("AuthController.googleLogin failed", {
         error: error.message,
@@ -100,12 +145,23 @@ export class AuthController {
 
   static async refreshToken(req: Request, res: Response) {
     try {
-      const { refreshToken } = req.body;
-      if (!refreshToken)
+      const cookies = (req as any).cookies as Record<string, string> | undefined;
+
+      // ✅ cookie-first (httpOnly refresh token), body fallback to avoid breaking old clients
+      const refreshToken = cookies?.refreshToken ?? req.body?.refreshToken;
+
+      if (!refreshToken) {
         return res.status(400).json({ error: "refreshToken is required" });
+      }
 
       const tokens = await AuthService.refreshToken(refreshToken);
-      return res.status(200).json(tokens);
+
+      setAuthCookies(res, {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      });
+
+      return res.status(200).json({ ok: true });
     } catch (error: any) {
       logger.error("AuthController.refreshToken failed", {
         error: error.message,
@@ -116,11 +172,23 @@ export class AuthController {
 
   static async logout(req: Request, res: Response) {
     try {
-      const { refreshToken } = req.body;
-      if (!refreshToken)
-        return res.status(400).json({ error: "refreshToken is required" });
+      const cookies = (req as any).cookies as Record<string, string> | undefined;
+
+      // ✅ cookie-first, body fallback
+      const refreshToken = cookies?.refreshToken ?? req.body?.refreshToken;
+
+      if (!refreshToken) {
+        // still clear cookies even if missing, to avoid stuck client state
+        clearAuthCookies(res);
+        res.clearCookie("user", { path: "/" });
+        return res.status(200).json({ message: "Logged out successfully" });
+      }
 
       await AuthService.logout(refreshToken);
+
+      clearAuthCookies(res);
+      res.clearCookie("user", { path: "/" });
+
       return res.status(200).json({ message: "Logged out successfully" });
     } catch (error: any) {
       logger.error("AuthController.logout failed", { error: error.message });
@@ -143,56 +211,39 @@ export class AuthController {
   }
 
   /* -----------------------------
-   Google OAuth - Callback (Secure with HTTP-only cookies)
------------------------------ */
+     Google OAuth - Callback (HTTP-only cookies)
+  ----------------------------- */
   static async googleCallback(req: Request, res: Response) {
     try {
       const { code } = req.query;
 
       if (!code || typeof code !== "string") {
-        return res
-          .status(400)
-          .json({ error: "Authorization code is required" });
+        return res.status(400).json({ error: "Authorization code is required" });
       }
 
       const result = await AuthService.handleGoogleCallback(code);
 
-      // Set HTTP-only cookies for tokens
-      res.cookie("accessToken", result.accessToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production", // HTTPS only in production
-        sameSite: "lax",
-        maxAge: 15 * 60 * 1000, // 15 minutes
-        path: "/",
+      // ✅ cookie-based auth (centralized options)
+      setAuthCookies(res, {
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
       });
 
-      res.cookie("refreshToken", result.refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-        path: "/",
-      });
-
-      // Also set user data in a cookie (this one can be read by frontend)
       res.cookie("user", JSON.stringify(result.user), {
-        httpOnly: false, // Frontend needs to read this
+        httpOnly: false,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        maxAge: 30 * 24 * 60 * 60 * 1000,
         path: "/",
       });
 
-      // Redirect to frontend success page (no tokens in URL!)
       const frontendUrl = `${process.env.FRONTEND_URL}/auth/callback`;
-
       return res.redirect(frontendUrl);
     } catch (error: any) {
       logger.error("AuthController.googleCallback failed", {
         error: error.message,
       });
 
-      // Redirect to frontend with error
       const frontendUrl = `${process.env.FRONTEND_URL}/auth/callback?error=${encodeURIComponent(error.message)}`;
       return res.redirect(frontendUrl);
     }
