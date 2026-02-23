@@ -21,7 +21,7 @@ import caisRoutes from "./module/cais/index.ts";
 import cmsRoute from "./module/cms/route.ts";
 import mailerRoute from "./module/mailer/route.ts";
 import careerRoute from "./module/career/route.ts";
-import { boolean } from "zod";
+import csemeRoute from "./module/cseme/route.ts";
 
 const app: Application = express();
 
@@ -62,6 +62,7 @@ app.use("/api/auth", authRoute);
 app.use("/api/blacklist", blacklist);
 app.use("/api", counterfeitReportRoutes);
 app.use("/api/mail", mailerRoute);
+app.use("/api/cseme", csemeRoute);
 app.use("/api/heroes", heroRoutes);
 app.use("/api/gi-crafts", giRoute);
 app.use("/api/craft-entities", entityApplicationRoutes);
