@@ -22,6 +22,7 @@ import cmsRoute from "./module/cms/route.ts";
 import mailerRoute from "./module/mailer/route.ts";
 import careerRoute from "./module/career/route.ts";
 import csemeRoute from "./module/cseme/route.ts";
+import crvasRoute from "./module/crvas/route.ts";
 
 const app: Application = express();
 
@@ -63,6 +64,7 @@ app.use("/api/blacklist", blacklist);
 app.use("/api", counterfeitReportRoutes);
 app.use("/api/mail", mailerRoute);
 app.use("/api/cseme", csemeRoute);
+app.use("/api/crvas", crvasRoute);
 app.use("/api/heroes", heroRoutes);
 app.use("/api/gi-crafts", giRoute);
 app.use("/api/craft-entities", entityApplicationRoutes);

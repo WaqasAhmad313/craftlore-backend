@@ -192,8 +192,18 @@ export class CsemeController {
 
   static async createEconData(req: Request, res: Response): Promise<Response> {
     try {
-      const payload = req.body as CreateEconDataInput;
-      const econData = await CsemeService.createEconData(payload);
+      const { datasetId } = req.params;
+      if (!datasetId) {
+        return ResponseHandler.error(res, "Dataset ID is required", 400);
+      }
+
+      const payload = req.body as Omit<CreateEconDataInput, "dataset_id">;
+
+      const econData = await CsemeService.createEconData({
+        ...payload,
+        dataset_id: datasetId,   // ← pull from URL, not body
+      });
+
       return ResponseHandler.success(res, econData, "Economic data added successfully", 201);
     } catch (error: unknown) {
       return ResponseHandler.error(res, (error as Error).message, 400);
