@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { CRVASService } from "./service.ts";
+import { sendSuccess, sendCreated, sendError } from "./response.ts";
 import type {
   CreateCategoryInput,
   UpdateCategoryInput,
@@ -11,28 +12,11 @@ import type {
 } from "./model.ts";
 
 /* ===== Typed Express Params ===== */
-interface CategoryIdParams {
-  categoryId: string;
-}
-
-interface CategorySlugParams {
-  slug: string;
-}
-
-interface IndicatorParams {
-  categoryId: string;
-  indicatorId: string;
-}
-
-interface DataPointParams {
-  categoryId: string;
-  indicatorId: string;
-  timePeriod: string;
-}
-
-interface AssessmentIdParams {
-  assessmentId: string;
-}
+interface CategoryIdParams { categoryId: string; }
+interface CategorySlugParams { slug: string; }
+interface IndicatorParams { categoryId: string; indicatorId: string; }
+interface DataPointParams { categoryId: string; indicatorId: string; timePeriod: string; }
+interface AssessmentIdParams { assessmentId: string; }
 
 export class CRVASController {
 
@@ -43,22 +27,19 @@ export class CRVASController {
   static async getDashboard(req: Request, res: Response): Promise<Response> {
     try {
       const data = await CRVASService.getDashboardData();
-      return res.json(data);
+      return sendSuccess(res, data, "Dashboard data retrieved successfully");
     } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message);
     }
   }
 
-  static async getCategoryBySlug(
-    req: Request<CategorySlugParams>,
-    res: Response
-  ): Promise<Response> {
+  static async getCategoryBySlug(req: Request<CategorySlugParams>, res: Response): Promise<Response> {
     try {
       const { slug } = req.params;
       const category = await CRVASService.getCategoryBySlug(slug);
-      return res.json(category);
+      return sendSuccess(res, category, `Category "${slug}" retrieved successfully`);
     } catch (error: unknown) {
-      return res.status(404).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message, 404);
     }
   }
 
@@ -70,58 +51,49 @@ export class CRVASController {
     try {
       const payload = req.body as CreateCategoryInput;
       const category = await CRVASService.createCategory(payload);
-      return res.status(201).json(category);
+      return sendCreated(res, category, "Category created successfully");
     } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message);
     }
   }
 
   static async getAllCategories(req: Request, res: Response): Promise<Response> {
     try {
       const categories = await CRVASService.getAllCategories();
-      return res.json(categories);
+      return sendSuccess(res, categories, "Categories retrieved successfully");
     } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message);
     }
   }
 
-  static async getCategoryById(
-    req: Request<CategoryIdParams>,
-    res: Response
-  ): Promise<Response> {
+  static async getCategoryById(req: Request<CategoryIdParams>, res: Response): Promise<Response> {
     try {
       const id = Number(req.params.categoryId);
       const category = await CRVASService.getCategoryById(id);
-      return res.json(category);
+      return sendSuccess(res, category, "Category retrieved successfully");
     } catch (error: unknown) {
-      return res.status(404).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message, 404);
     }
   }
 
-  static async updateCategory(
-    req: Request<CategoryIdParams>,
-    res: Response
-  ): Promise<Response> {
+  static async updateCategory(req: Request<CategoryIdParams>, res: Response): Promise<Response> {
     try {
       const id = Number(req.params.categoryId);
       const payload = req.body as UpdateCategoryInput;
       const category = await CRVASService.updateCategory(id, payload);
-      return res.json(category);
+      return sendSuccess(res, category, "Category updated successfully");
     } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message);
     }
   }
 
-  static async deleteCategory(
-    req: Request<CategoryIdParams>,
-    res: Response
-  ): Promise<Response> {
+  static async deleteCategory(req: Request<CategoryIdParams>, res: Response): Promise<Response> {
     try {
       const id = Number(req.params.categoryId);
       await CRVASService.deleteCategory(id);
-      return res.json({ message: "Category deleted successfully" });
+      return sendSuccess(res, null, "Category deleted successfully");
     } catch (error: unknown) {
-      return res.status(404).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message, 404);
     }
   }
 
@@ -129,46 +101,37 @@ export class CRVASController {
      ADMIN: INDICATORS
   =========================== */
 
-  static async addIndicator(
-    req: Request<CategoryIdParams>,
-    res: Response
-  ): Promise<Response> {
+  static async addIndicator(req: Request<CategoryIdParams>, res: Response): Promise<Response> {
     try {
       const id = Number(req.params.categoryId);
       const payload = req.body as CreateIndicatorInput;
       const category = await CRVASService.addIndicator(id, payload);
-      return res.status(201).json(category);
+      return sendCreated(res, category, "Indicator added successfully");
     } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message);
     }
   }
 
-  static async updateIndicator(
-    req: Request<IndicatorParams>,
-    res: Response
-  ): Promise<Response> {
+  static async updateIndicator(req: Request<IndicatorParams>, res: Response): Promise<Response> {
     try {
       const categoryId = Number(req.params.categoryId);
       const { indicatorId } = req.params;
       const payload = req.body as UpdateIndicatorInput;
       const category = await CRVASService.updateIndicator(categoryId, indicatorId, payload);
-      return res.json(category);
+      return sendSuccess(res, category, "Indicator updated successfully");
     } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message);
     }
   }
 
-  static async deleteIndicator(
-    req: Request<IndicatorParams>,
-    res: Response
-  ): Promise<Response> {
+  static async deleteIndicator(req: Request<IndicatorParams>, res: Response): Promise<Response> {
     try {
       const categoryId = Number(req.params.categoryId);
       const { indicatorId } = req.params;
       const category = await CRVASService.deleteIndicator(categoryId, indicatorId);
-      return res.json(category);
+      return sendSuccess(res, category, "Indicator deleted successfully");
     } catch (error: unknown) {
-      return res.status(404).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message, 404);
     }
   }
 
@@ -176,46 +139,37 @@ export class CRVASController {
      ADMIN: DATA POINTS
   =========================== */
 
-  static async addDataPoint(
-    req: Request<IndicatorParams>,
-    res: Response
-  ): Promise<Response> {
+  static async addDataPoint(req: Request<IndicatorParams>, res: Response): Promise<Response> {
     try {
       const categoryId = Number(req.params.categoryId);
       const { indicatorId } = req.params;
       const payload = req.body as CreateDataPointInput;
       const category = await CRVASService.addDataPoint(categoryId, indicatorId, payload);
-      return res.status(201).json(category);
+      return sendCreated(res, category, "Data point added successfully");
     } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message);
     }
   }
 
-  static async updateDataPoint(
-    req: Request<DataPointParams>,
-    res: Response
-  ): Promise<Response> {
+  static async updateDataPoint(req: Request<DataPointParams>, res: Response): Promise<Response> {
     try {
       const categoryId = Number(req.params.categoryId);
       const { indicatorId, timePeriod } = req.params;
       const category = await CRVASService.updateDataPoint(categoryId, indicatorId, timePeriod, req.body);
-      return res.json(category);
+      return sendSuccess(res, category, "Data point updated successfully");
     } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message);
     }
   }
 
-  static async deleteDataPoint(
-    req: Request<DataPointParams>,
-    res: Response
-  ): Promise<Response> {
+  static async deleteDataPoint(req: Request<DataPointParams>, res: Response): Promise<Response> {
     try {
       const categoryId = Number(req.params.categoryId);
       const { indicatorId, timePeriod } = req.params;
       const category = await CRVASService.deleteDataPoint(categoryId, indicatorId, timePeriod);
-      return res.json(category);
+      return sendSuccess(res, category, "Data point deleted successfully");
     } catch (error: unknown) {
-      return res.status(404).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message, 404);
     }
   }
 
@@ -227,58 +181,49 @@ export class CRVASController {
     try {
       const payload = req.body as CreateAssessmentInput;
       const assessment = await CRVASService.createAssessment(payload);
-      return res.status(201).json(assessment);
+      return sendCreated(res, assessment, "Assessment created successfully");
     } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message);
     }
   }
 
   static async getAllAssessments(req: Request, res: Response): Promise<Response> {
     try {
       const assessments = await CRVASService.getAllAssessments();
-      return res.json(assessments);
+      return sendSuccess(res, assessments, "Assessments retrieved successfully");
     } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message);
     }
   }
 
-  static async getAssessmentById(
-    req: Request<AssessmentIdParams>,
-    res: Response
-  ): Promise<Response> {
+  static async getAssessmentById(req: Request<AssessmentIdParams>, res: Response): Promise<Response> {
     try {
       const id = Number(req.params.assessmentId);
       const assessment = await CRVASService.getAssessmentById(id);
-      return res.json(assessment);
+      return sendSuccess(res, assessment, "Assessment retrieved successfully");
     } catch (error: unknown) {
-      return res.status(404).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message, 404);
     }
   }
 
-  static async updateAssessment(
-    req: Request<AssessmentIdParams>,
-    res: Response
-  ): Promise<Response> {
+  static async updateAssessment(req: Request<AssessmentIdParams>, res: Response): Promise<Response> {
     try {
       const id = Number(req.params.assessmentId);
       const payload = req.body as UpdateAssessmentInput;
       const assessment = await CRVASService.updateAssessment(id, payload);
-      return res.json(assessment);
+      return sendSuccess(res, assessment, "Assessment updated successfully");
     } catch (error: unknown) {
-      return res.status(400).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message);
     }
   }
 
-  static async deleteAssessment(
-    req: Request<AssessmentIdParams>,
-    res: Response
-  ): Promise<Response> {
+  static async deleteAssessment(req: Request<AssessmentIdParams>, res: Response): Promise<Response> {
     try {
       const id = Number(req.params.assessmentId);
       await CRVASService.deleteAssessment(id);
-      return res.json({ message: "Assessment deleted successfully" });
+      return sendSuccess(res, null, "Assessment deleted successfully");
     } catch (error: unknown) {
-      return res.status(404).json({ message: (error as Error).message });
+      return sendError(res, (error as Error).message, 404);
     }
   }
 }
