@@ -30,7 +30,17 @@ export class CareersController {
 
   static async createJob(req: Request, res: Response): Promise<Response> {
     try {
-      const payload = req.body as CreateJobInput;
+      const payload: CreateJobInput = {
+        title:            req.body.title,
+        department:       req.body.department,
+        location:         req.body.location,
+        employment_type:  req.body.employment_type,
+        description:      req.body.description,
+        responsibilities: req.body.responsibilities,
+        requirements:     req.body.requirements,
+        compensation_range: req.body.compensation_range ?? null,
+        closing_date:     req.body.closing_date ?? null,  // ← new field
+      };
       const job = await CareersService.createJob(payload);
       return ResponseHandler.success(res, job, "Job created successfully", 201);
     } catch (error: unknown) {
@@ -88,7 +98,13 @@ export class CareersController {
       if (!jobId) {
         return ResponseHandler.error(res, "Job ID is required", 400);
       }
-      const payload = req.body as UpdateJobInput;
+      const payload: UpdateJobInput = {
+        ...(req.body as UpdateJobInput),
+        // Explicitly carry closing_date so it can be set or cleared (null)
+        closing_date: req.body.closing_date !== undefined
+          ? req.body.closing_date   // could be a date string or null
+          : undefined,
+      };
       const job = await CareersService.updateJob(jobId, payload);
       if (!job) {
         return ResponseHandler.error(res, "Job not found", 404);
@@ -123,19 +139,19 @@ export class CareersController {
       if (!jobId) {
         return ResponseHandler.error(res, "Job ID is required", 400);
       }
-      
+
       const resumeFile = req.file;
       if (!resumeFile) {
         return ResponseHandler.error(res, "Resume file is required", 400);
       }
 
       const payload = {
-        full_name: req.body.full_name as string,
-        email: req.body.email as string,
+        full_name:     req.body.full_name as string,
+        email:         req.body.email as string,
         portfolio_url: req.body.portfolio_url as string | undefined,
-        github_url: req.body.github_url as string | undefined,
-        linkedin_url: req.body.linkedin_url as string | undefined,
-        cover_note: req.body.cover_note as string | undefined,
+        github_url:    req.body.github_url as string | undefined,
+        linkedin_url:  req.body.linkedin_url as string | undefined,
+        cover_note:    req.body.cover_note as string | undefined,
       };
 
       const application = await CareersService.submitApplication(
@@ -184,23 +200,18 @@ export class CareersController {
   static async joinTalentPool(req: Request, res: Response): Promise<Response> {
     try {
       const resumeFile = req.file;
-
       if (!resumeFile) {
         return ResponseHandler.error(res, "Resume file is required", 400);
       }
 
       const payload = {
-        full_name: req.body.full_name as string,
-        email: req.body.email as string,
+        full_name:        req.body.full_name as string,
+        email:            req.body.email as string,
         area_of_interest: req.body.area_of_interest as string,
-        notes: req.body.notes as string | undefined,
+        notes:            req.body.notes as string | undefined,
       };
 
-      const entry = await CareersService.joinTalentPool(
-        payload,
-        resumeFile
-      );
-
+      const entry = await CareersService.joinTalentPool(payload, resumeFile);
       return ResponseHandler.success(res, entry, "Successfully joined talent pool", 201);
     } catch (error: unknown) {
       return ResponseHandler.error(res, (error as Error).message, 400);

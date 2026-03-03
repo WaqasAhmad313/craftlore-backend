@@ -26,7 +26,6 @@ class PamService {
 
   static async getDetails(id: string): Promise<{
     appraisal: PamAppraisalRow;
-
     valuation: unknown | null;
   } | null> {
     const appraisal = await PamModel.getById(id);
@@ -36,7 +35,7 @@ class PamService {
     return { appraisal, valuation };
   }
 
-  /** Approve: updates status + computes valuation (this replaces the Supabase trigger behavior). */
+  /** Approve: updates status + computes valuation. */
   static async approve(id: string): Promise<{ appraisal: PamAppraisalRow; valuation: unknown }> {
     const appraisal = await PamModel.getById(id);
     if (!appraisal) throw new Error("Appraisal not found");
@@ -77,7 +76,6 @@ class PamService {
   }
 
   static async delete(id: string): Promise<void> {
-    // Also delete valuation if exists (best-effort).
     await FveService.deleteValuationByAppraisalId(id);
     const ok = await PamModel.deleteById(id);
     if (!ok) throw new Error("Appraisal not found");

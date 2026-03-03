@@ -54,6 +54,24 @@ export class CareersService {
     }
   }
 
+  /**
+   * Validates that closing_date is a valid future ISO date string.
+   * Accepts "YYYY-MM-DD" or full ISO timestamp.
+   * Throws if invalid or in the past.
+   */
+  private static validateClosingDate(closing_date: string): void {
+    const parsed = new Date(closing_date);
+    if (isNaN(parsed.getTime())) {
+      throw new Error("Invalid closing date format. Use YYYY-MM-DD or ISO timestamp.");
+    }
+    // Strip time — compare at day granularity so "today" is still valid
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (parsed < today) {
+      throw new Error("Closing date must be today or a future date.");
+    }
+  }
+
   /* -------- JOBS -------- */
 
   static async createJob(payload: CreateJobInput): Promise<Job> {
@@ -75,12 +93,22 @@ export class CareersService {
     if (!payload.requirements || payload.requirements.length === 0) {
       throw new Error("At least one requirement is required");
     }
+    if (payload.closing_date) {
+      this.validateClosingDate(payload.closing_date);
+    }
 
     return CareersModel.createJob(payload);
   }
 
   static async getJobById(id: string): Promise<Job | null> {
-    return CareersModel.getJobById(id);
+    const job = await CareersModel.getJobById(id);
+    // If the job is open but its closing_date has passed, close it now.
+    // The DB trigger handles this on writes; this covers plain reads.
+    if (job && job.status === "open" && job.days_until_closing === 0) {
+      await CareersModel.closeExpiredJobs();
+      return CareersModel.getJobById(id); // re-fetch with updated status
+    }
+    return job;
   }
 
   static async getAllJobs(status?: JobStatus): Promise<Job[]> {
@@ -88,6 +116,10 @@ export class CareersService {
   }
 
   static async getOpenJobs(): Promise<Job[]> {
+    // Opportunistically close any jobs whose closing_date has passed.
+    // This is a safety net — the DB trigger + pg_cron are the primary
+    // mechanism, but this ensures correctness even without cron.
+    await CareersModel.closeExpiredJobs();
     return CareersModel.getAllJobs("open");
   }
 
@@ -112,6 +144,10 @@ export class CareersService {
     }
     if (payload.requirements && payload.requirements.length === 0) {
       throw new Error("Requirements cannot be empty");
+    }
+    // Allow clearing closing_date (null) but validate if a new value is given
+    if (payload.closing_date != null) {
+      this.validateClosingDate(payload.closing_date);
     }
 
     return CareersModel.updateJob(id, payload);
@@ -206,7 +242,6 @@ export class CareersService {
     payload: Omit<CreateTalentPoolInput, "resume_url">,
     resumeFile: Express.Multer.File
   ): Promise<TalentPoolEntry> {
-    // Validate required fields
     if (!payload.full_name?.trim()) {
       throw new Error("Full name is required");
     }
@@ -220,7 +255,6 @@ export class CareersService {
       throw new Error("Area of interest is required");
     }
 
-    // Check duplicate entry
     const isDuplicate = await CareersModel.checkDuplicateTalentPoolEntry(
       payload.email
     );
@@ -228,11 +262,9 @@ export class CareersService {
       throw new Error("This email is already in our talent pool");
     }
 
-    // Validate and upload resume
     this.validateResumeFile(resumeFile);
     const resumeUrl = await CareersFileUploader.uploadTalentPoolResume(resumeFile);
 
-    // Create talent pool entry
     const talentPoolData: CreateTalentPoolInput = {
       full_name: payload.full_name.trim(),
       email: payload.email.trim().toLowerCase(),
