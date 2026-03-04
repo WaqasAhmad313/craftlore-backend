@@ -1,804 +1,787 @@
+// =============================================================
+// service.ts — Calculator Module
+// All business logic. Calls models. Never touches req/res.
+// =============================================================
+
 import {
-  type CalculatorMode,
-  CarbonCalculationModel,
-  CarbonFactorModel,
-  type CarbonFactorRow,
-  CraftCalculatorModel,
-  type CraftCalculatorRow,
-  type FactorUnit,
+  CategoryModel,
+  SubcategoryModel,
+  ProductModel,
+  CalculatorModel,
+  CarbonFactorLibraryModel,
 } from "./model.ts";
+import { validateCalculatorConfig, generateSlug, round4, pgNumericToNumber } from "./helpers.ts";
+import type {
+  CalculatorConfig,
+  CalculatorRow,
+  CalculatorType,
+  CarbonCalculationResult,
+  CarbonFactorLibraryRow,
+  CategoryRow,
+  BreakdownItem,
+  CalculationResult,
+  CalculatorConfigResponse,
+  ConfidenceLevel,
+  CreateCarbonFactorInput,
+  CreateCalculatorInput,
+  CreateCategoryInput,
+  CreateProductInput,
+  CreateSubcategoryInput,
+  FieldOption,
+  PaginatedResult,
+  PaginationParams,
+  Placement,
+  PlacementResult,
+  ProductRow,
+  ScoreCalculationResult,
+  SubcategoryRow,
+  UpdateCarbonFactorInput,
+  UpdateCalculatorInput,
+  UpdateCategoryInput,
+  UpdateProductInput,
+  UpdateSubcategoryInput,
+  UserCalculationInput,
+} from "./types.ts";
+import { isPlainObject } from "./helpers.ts";
 
-/** -------- Public result types -------- */
+// =============================================================
+// CategoryService
+// =============================================================
 
-export type ConfidenceLevel = "low" | "medium" | "high";
+export class CategoryService {
+  static async create(
+    input: CreateCategoryInput
+  ): Promise<CategoryRow> {
+    const slug = input.slug || generateSlug(input.name);
 
-export interface CalculationRequest {
-  craft_id: string;
-  mode: CalculatorMode;
-  inputs: Record<string, unknown>;
-  save?: boolean; // default true
-  requested_by?: string;
-}
+    const existing = await CategoryModel.findBySlug(slug);
+    if (existing) {
+      throw new Error(`A category with slug "${slug}" already exists`);
+    }
 
-export interface CalculationWarning {
-  code: string;
-  message: string;
-  field?: string;
-}
-
-export interface CalculationComponentBreakdown {
-  name: string;
-  factor_type: string;
-  factor_key: string;
-  unit: FactorUnit;
-  value: number;
-  applied_as: string; // weight_based/per_item/etc
-  co2: number;
-}
-
-export interface CalculationResponse {
-  craft_id: string;
-  mode: CalculatorMode;
-  total_kg_co2e: number;
-  weight_kg: number | null;
-  breakdown: CalculationComponentBreakdown[];
-  modifiers: Array<{ name: string; factor_type: string; factor_key: string; percent: number }>;
-  missing_factors: Array<{ factor_type: string; factor_key: string; reason: string }>;
-  warnings: CalculationWarning[];
-  confidence: ConfidenceLevel;
-  saved_calculation_id?: number;
-}
-
-/** -------- Internal config types (validated at runtime) -------- */
-
-type ApplyType =
-  | "weight_based"
-  | "area_based"
-  | "per_item"
-  | "per_shipment"
-  | "multi_per_item"
-  | "percent_on_subtotal";
-
-interface FixedFactorRef {
-  factor_type: string;
-  factor_key: string;
-}
-
-interface CalcComponent {
-  name: string;
-  apply: ApplyType;
-
-  // normal (user-selected)
-  factor_field?: string;
-  factor_type?: string;
-
-  // fixed (not user-selected)
-  factor_fixed?: FixedFactorRef;
-}
-
-interface CalcModifier {
-  name: string;
-  apply: "percent_on_subtotal";
-  factor_field: string;
-  factor_type?: string; // can be overridden by factor_map
-}
-
-interface CalculatorConfig {
-  craft_id?: string;
-  aliases?: Record<string, Record<string, string>>;
-  factor_map: Record<string, string>;
-  options: Record<string, Array<{ label?: string; value: string }>>;
-  modes?: unknown;
-  calculation: {
-    components: CalcComponent[];
-    modifiers?: CalcModifier[];
-  };
-}
-
-/** ---------------- Service ---------------- */
-
-export class CarbonCalculatorService {
-  static async listCalculators() {
-    return CraftCalculatorModel.listActive();
+    return CategoryModel.create({ ...input, slug });
   }
 
-  static async getCalculator(craftId: string) {
-    const row = await CraftCalculatorModel.getById(craftId);
-    if (!row || !row.is_active) return null;
+  static async list(
+    params: PaginationParams
+  ): Promise<PaginatedResult<CategoryRow>> {
+    const [data, total] = await Promise.all([
+      CategoryModel.findAll(params),
+      CategoryModel.countAll(),
+    ]);
+    return { data, total, limit: params.limit, offset: params.offset };
+  }
+
+  static async getById(id: number): Promise<CategoryRow> {
+    const row = await CategoryModel.findById(id);
+    if (!row) throw new NotFoundError(`Category ${id} not found`);
     return row;
   }
 
-  static async calculate(req: CalculationRequest): Promise<CalculationResponse> {
-    const craftId = req.craft_id.trim();
-    const mode = req.mode;
+  static async update(
+    id: number,
+    input: UpdateCategoryInput
+  ): Promise<CategoryRow> {
+    await CategoryService.getById(id); // ensure exists
 
-    const craft = await CraftCalculatorModel.getById(craftId);
-    if (!craft || !craft.is_active) {
-      throw new Error(`Craft calculator not found: ${craftId}`);
+    if (input.slug) {
+      const existing = await CategoryModel.findBySlug(input.slug);
+      if (existing && existing.id !== id) {
+        throw new Error(`Slug "${input.slug}" is already in use`);
+      }
     }
 
-    const config = parseCalculatorConfig(craft);
+    const updated = await CategoryModel.update(id, input);
+    if (!updated) throw new NotFoundError(`Category ${id} not found`);
+    return updated;
+  }
 
-    // 1) normalize inputs
-    const normalizedInputs = normalizeInputs(req.inputs, config.aliases);
+  static async delete(id: number): Promise<void> {
+    await CategoryService.getById(id); // ensure exists
+    await CategoryModel.delete(id);
+  }
+}
 
-    // 2) resolve weight (kg)
-    const { weightKg, warnings: weightWarnings } = resolveWeightKg(mode, normalizedInputs, config);
-    const warnings: CalculationWarning[] = [...weightWarnings];
+// =============================================================
+// SubcategoryService
+// =============================================================
 
-    // 3) collect factor requests from components + modifiers
-    const factorRequests = collectFactorRequests(config, normalizedInputs);
+export class SubcategoryService {
+  static async create(
+    input: CreateSubcategoryInput
+  ): Promise<SubcategoryRow> {
+    // ensure parent exists
+    const parent = await CategoryModel.findById(input.category_id);
+    if (!parent) {
+      throw new NotFoundError(`Category ${input.category_id} not found`);
+    }
 
-    // 4) fetch factors + lookup
-    const factors = await CarbonFactorModel.getActiveByTypeAndKeys(factorRequests);
-    const lookup = buildFactorLookup(factors);
+    const slug = input.slug || generateSlug(input.name);
+    const existing = await SubcategoryModel.findBySlug(slug);
+    if (existing) {
+      throw new Error(`A subcategory with slug "${slug}" already exists`);
+    }
 
-    // 5) compute
-    const missing_factors: Array<{ factor_type: string; factor_key: string; reason: string }> = [];
-    const breakdown: CalculationComponentBreakdown[] = [];
-    const modifiers: Array<{ name: string; factor_type: string; factor_key: string; percent: number }> = [];
+    return SubcategoryModel.create({ ...input, slug });
+  }
 
-    let subtotal = 0;
+  static async listByCategoryId(
+    categoryId: number,
+    params: PaginationParams
+  ): Promise<PaginatedResult<SubcategoryRow>> {
+    const [data, total] = await Promise.all([
+      SubcategoryModel.findByCategoryId(categoryId, params),
+      SubcategoryModel.countByCategoryId(categoryId),
+    ]);
+    return { data, total, limit: params.limit, offset: params.offset };
+  }
 
-    for (const comp of config.calculation.components) {
-      // Fixed factor: apply directly (no input needed)
-      if (comp.factor_fixed) {
-        const r = applyFactor(
-          {
-            name: comp.name,
-            apply: comp.apply,
-            factor_type: comp.factor_fixed.factor_type,
-            factor_field: "(fixed)",
-          },
-          comp.factor_fixed.factor_key,
-          lookup,
-          weightKg,
-          null,
-          warnings,
-          missing_factors,
-        );
+  static async getById(id: number): Promise<SubcategoryRow> {
+    const row = await SubcategoryModel.findById(id);
+    if (!row) throw new NotFoundError(`Subcategory ${id} not found`);
+    return row;
+  }
 
-        if (r) {
-          breakdown.push(r);
-          subtotal += r.co2;
-        }
-        continue;
+  static async update(
+    id: number,
+    input: UpdateSubcategoryInput
+  ): Promise<SubcategoryRow> {
+    await SubcategoryService.getById(id);
+
+    if (input.slug) {
+      const existing = await SubcategoryModel.findBySlug(input.slug);
+      if (existing && existing.id !== id) {
+        throw new Error(`Slug "${input.slug}" is already in use`);
       }
+    }
 
-      // Field-driven factor: read selection(s) from inputs
-      if (!comp.factor_field) {
-        warnings.push({ code: "invalid_component", message: `Component ${comp.name} missing factor_field` });
-        continue;
+    const updated = await SubcategoryModel.update(id, input);
+    if (!updated) throw new NotFoundError(`Subcategory ${id} not found`);
+    return updated;
+  }
+
+  static async delete(id: number): Promise<void> {
+    await SubcategoryService.getById(id);
+    await SubcategoryModel.delete(id);
+  }
+}
+
+// =============================================================
+// ProductService
+// =============================================================
+
+export class ProductService {
+  static async create(input: CreateProductInput): Promise<ProductRow> {
+    const parent = await SubcategoryModel.findById(input.subcategory_id);
+    if (!parent) {
+      throw new NotFoundError(`Subcategory ${input.subcategory_id} not found`);
+    }
+
+    const slug = input.slug || generateSlug(input.name);
+    const existing = await ProductModel.findBySlug(slug);
+    if (existing) {
+      throw new Error(`A product with slug "${slug}" already exists`);
+    }
+
+    return ProductModel.create({ ...input, slug });
+  }
+
+  static async listBySubcategoryId(
+    subcategoryId: number,
+    params: PaginationParams
+  ): Promise<PaginatedResult<ProductRow>> {
+    const [data, total] = await Promise.all([
+      ProductModel.findBySubcategoryId(subcategoryId, params),
+      ProductModel.countBySubcategoryId(subcategoryId),
+    ]);
+    return { data, total, limit: params.limit, offset: params.offset };
+  }
+
+  static async getById(id: number): Promise<ProductRow> {
+    const row = await ProductModel.findById(id);
+    if (!row) throw new NotFoundError(`Product ${id} not found`);
+    return row;
+  }
+
+  static async update(
+    id: number,
+    input: UpdateProductInput
+  ): Promise<ProductRow> {
+    await ProductService.getById(id);
+
+    if (input.slug) {
+      const existing = await ProductModel.findBySlug(input.slug);
+      if (existing && existing.id !== id) {
+        throw new Error(`Slug "${input.slug}" is already in use`);
       }
+    }
 
-      const factorType = resolveFactorType(config, comp.factor_field, comp.factor_type);
-      if (!factorType) {
-        warnings.push({
-          code: "invalid_component",
-          message: `Component ${comp.name} missing factor_type and no factor_map override`,
-          field: comp.factor_field,
-        });
-        continue;
-      }
+    const updated = await ProductModel.update(id, input);
+    if (!updated) throw new NotFoundError(`Product ${id} not found`);
+    return updated;
+  }
 
-      const { keys, err } = resolveSelectedKeys(comp.factor_field, normalizedInputs);
-      if (err) {
-        warnings.push({ code: "missing_input", message: err, field: comp.factor_field });
-        continue;
-      }
+  static async delete(id: number): Promise<void> {
+    await ProductService.getById(id);
+    await ProductModel.delete(id);
+  }
+}
 
-      if (comp.apply === "multi_per_item") {
-        for (const key of keys) {
-          const r = applyFactor(
-            { name: comp.name, apply: comp.apply, factor_type: factorType, factor_field: comp.factor_field },
-            key,
-            lookup,
-            weightKg,
-            null,
-            warnings,
-            missing_factors,
-          );
-          if (r) {
-            breakdown.push(r);
-            subtotal += r.co2;
-          }
-        }
-        continue;
-      }
+// =============================================================
+// CalculatorService
+// =============================================================
 
-      const key = keys[0];
-      if (!key) continue;
+export class CalculatorService {
+  static async create(input: CreateCalculatorInput): Promise<CalculatorRow> {
+    const product = await ProductModel.findById(input.product_id);
+    if (!product) {
+      throw new NotFoundError(`Product ${input.product_id} not found`);
+    }
 
-      const r = applyFactor(
-        { name: comp.name, apply: comp.apply, factor_type: factorType, factor_field: comp.factor_field },
-        key,
-        lookup,
-        weightKg,
-        null,
-        warnings,
-        missing_factors,
+    // one calculator per type per product
+    const existing = await CalculatorModel.findByProductIdAndType(
+      input.product_id,
+      input.type
+    );
+    if (existing) {
+      throw new Error(
+        `A ${input.type} calculator already exists for product ${input.product_id}`
       );
-      if (r) {
-        breakdown.push(r);
-        subtotal += r.co2;
-      }
     }
 
-    // modifiers (percent on subtotal)
-    const modifierList = config.calculation.modifiers ?? [];
-    let percentSum = 0;
-
-    for (const mod of modifierList) {
-      const factorType = resolveFactorType(config, mod.factor_field, mod.factor_type);
-      if (!factorType) {
-        warnings.push({
-          code: "invalid_modifier",
-          message: `Modifier ${mod.name} missing factor_type and no factor_map override`,
-          field: mod.factor_field,
-        });
-        continue;
-      }
-
-      const { keys, err } = resolveSelectedKeys(mod.factor_field, normalizedInputs);
-      if (err) {
-        warnings.push({ code: "missing_input", message: err, field: mod.factor_field });
-        continue;
-      }
-
-      for (const key of keys) {
-        const f = lookup.get(`${factorType}::${key}`);
-        if (!f) {
-          missing_factors.push({ factor_type: factorType, factor_key: key, reason: "factor_not_found" });
-          continue;
-        }
-        if (f.unit !== "percent") {
-          warnings.push({
-            code: "unit_mismatch",
-            message: `Modifier ${mod.name} expects percent but got ${f.unit} (${factorType}/${key})`,
-            field: mod.factor_field,
-          });
-          missing_factors.push({ factor_type: factorType, factor_key: key, reason: "unit_mismatch" });
-          continue;
-        }
-        const v = numericOrZero(f.value);
-        percentSum += v;
-        modifiers.push({ name: mod.name, factor_type: factorType, factor_key: key, percent: v });
-      }
+    const validation = validateCalculatorConfig(input.config);
+    if (!validation.valid) {
+      throw new ValidationError("Invalid calculator config", validation.errors);
     }
 
-    const total = round4(subtotal * (1 + percentSum / 100));
-
-    const confidence = inferConfidence({
-      mode,
-      missingCount: missing_factors.length,
-      factorConfidences: extractConfidenceLevels(factors),
-      warningsCount: warnings.length,
+    return CalculatorModel.create({
+      ...input,
+      config: validation.config!,
     });
+  }
 
-    const resultPayload = {
-      craft_id: craftId,
-      mode,
-      total_kg_co2e: total,
-      weight_kg: weightKg,
-      breakdown,
-      modifiers,
-      missing_factors,
-      warnings,
-      confidence,
-      calculated_at: new Date().toISOString(),
-    };
+  static async listByProductId(productId: number): Promise<CalculatorRow[]> {
+    const product = await ProductModel.findById(productId);
+    if (!product) throw new NotFoundError(`Product ${productId} not found`);
+    return CalculatorModel.findByProductId(productId);
+  }
 
-    // Save by default
-    let savedId: number | undefined;
-    if (req.save !== false) {
-      const saved = await CarbonCalculationModel.create({
-        craft_id: craftId,
-        mode,
-        inputs: normalizedInputs,
-        result: resultPayload,
-      });
-      savedId = saved.id;
+  static async getById(id: number): Promise<CalculatorRow> {
+    const row = await CalculatorModel.findById(id);
+    if (!row) throw new NotFoundError(`Calculator ${id} not found`);
+    return row;
+  }
+
+  static async update(
+    id: number,
+    input: UpdateCalculatorInput
+  ): Promise<CalculatorRow> {
+    await CalculatorService.getById(id);
+
+    if (input.config !== undefined) {
+      const validation = validateCalculatorConfig(input.config);
+      if (!validation.valid) {
+        throw new ValidationError("Invalid calculator config", validation.errors);
+      }
+      input.config = validation.config!;
     }
 
-    return {
-      craft_id: craftId,
-      mode,
-      total_kg_co2e: total,
-      weight_kg: weightKg,
-      breakdown,
-      modifiers,
-      missing_factors,
-      warnings,
-      confidence,
-      ...(savedId ? { saved_calculation_id: savedId } : {}),
-    };
+    const updated = await CalculatorModel.update(id, input);
+    if (!updated) throw new NotFoundError(`Calculator ${id} not found`);
+    return updated;
+  }
+
+  // Patch only the fields array inside config
+  static async patchFields(
+    id: number,
+    fields: unknown
+  ): Promise<CalculatorRow> {
+    const calc = await CalculatorService.getById(id);
+    const existingConfig = parseConfig(calc.config);
+
+    const validation = validateCalculatorConfig({ ...existingConfig, fields });
+    if (!validation.valid) {
+      throw new ValidationError("Invalid fields config", validation.errors);
+    }
+
+    const updated = await CalculatorModel.patchConfig(id, {
+      fields: validation.config!.fields,
+    });
+    if (!updated) throw new NotFoundError(`Calculator ${id} not found`);
+    return updated;
+  }
+
+  // Patch only the formula inside config
+  static async patchFormula(
+    id: number,
+    formula: unknown
+  ): Promise<CalculatorRow> {
+    const calc = await CalculatorService.getById(id);
+    if (calc.type !== "carbon") {
+      throw new Error("Formula config only applies to carbon calculators");
+    }
+
+    const existingConfig = parseConfig(calc.config);
+    const validation = validateCalculatorConfig({ ...existingConfig, formula });
+    if (!validation.valid) {
+      throw new ValidationError("Invalid formula config", validation.errors);
+    }
+
+    const updated = await CalculatorModel.patchConfig(id, {
+      formula: validation.config!.formula,
+    });
+    if (!updated) throw new NotFoundError(`Calculator ${id} not found`);
+    return updated;
+  }
+
+  // Patch only the placements array inside config
+  static async patchPlacements(
+    id: number,
+    placements: unknown
+  ): Promise<CalculatorRow> {
+    const calc = await CalculatorService.getById(id);
+    if (calc.type !== "carbon") {
+      throw new Error("Placements only apply to carbon calculators");
+    }
+
+    const existingConfig = parseConfig(calc.config);
+    const validation = validateCalculatorConfig({
+      ...existingConfig,
+      placements,
+    });
+    if (!validation.valid) {
+      throw new ValidationError("Invalid placements config", validation.errors);
+    }
+
+    const updated = await CalculatorModel.patchConfig(id, {
+      placements: validation.config!.placements,
+    });
+    if (!updated) throw new NotFoundError(`Calculator ${id} not found`);
+    return updated;
+  }
+
+  static async delete(id: number): Promise<void> {
+    await CalculatorService.getById(id);
+    await CalculatorModel.delete(id);
   }
 }
 
-/** ---------------- Dashboard Service ---------------- */
+// =============================================================
+// CarbonFactorLibraryService
+// =============================================================
 
-export class CarbonDashboardService {
-  static async getSummary(): Promise<
-    Array<{
-      craft_id: string;
-      craft_name: string;
-      category: string | null;
-      total_kg_co2e: number;
-      confidence: ConfidenceLevel;
-      missing_factors_count: number;
-      warnings_count: number;
-      updated_at: string;
-      error?: string;
-    }>
-  > {
-    const calculators = await CraftCalculatorModel.listActive();
+export class CarbonFactorLibraryService {
+  static async create(
+    input: CreateCarbonFactorInput
+  ): Promise<CarbonFactorLibraryRow> {
+    return CarbonFactorLibraryModel.create(input);
+  }
 
-    const out: Array<{
-      craft_id: string;
-      craft_name: string;
-      category: string | null;
-      total_kg_co2e: number;
-      confidence: ConfidenceLevel;
-      missing_factors_count: number;
-      warnings_count: number;
-      updated_at: string;
-      error?: string;
-    }> = [];
+  static async list(params: {
+    category?: string;
+    is_active?: boolean;
+    search?: string;
+    limit: number;
+    offset: number;
+  }): Promise<PaginatedResult<CarbonFactorLibraryRow>> {
+    const [data, total] = await Promise.all([
+      CarbonFactorLibraryModel.findAll(params),
+      CarbonFactorLibraryModel.countAll(params),
+    ]);
+    return { data, total, limit: params.limit, offset: params.offset };
+  }
 
-    for (const c of calculators) {
-      try {
-        const full = await CraftCalculatorModel.getById(c.craft_id);
-        if (!full) continue;
+  static async getById(id: number): Promise<CarbonFactorLibraryRow> {
+    const row = await CarbonFactorLibraryModel.findById(id);
+    if (!row) throw new NotFoundError(`Carbon factor ${id} not found`);
+    return row;
+  }
 
-        const cfg = parseCalculatorConfig(full);
-        const defaults = extractEstimatedDefaults(cfg);
+  static async update(
+    id: number,
+    input: UpdateCarbonFactorInput
+  ): Promise<CarbonFactorLibraryRow> {
+    await CarbonFactorLibraryService.getById(id);
+    const updated = await CarbonFactorLibraryModel.update(id, input);
+    if (!updated) throw new NotFoundError(`Carbon factor ${id} not found`);
+    return updated;
+  }
 
-        const res = await CarbonCalculatorService.calculate({
-          craft_id: c.craft_id,
-          mode: "estimated",
-          inputs: defaults,
-          save: false,
-        });
-
-        out.push({
-          craft_id: c.craft_id,
-          craft_name: c.craft_name,
-          category: c.category,
-          total_kg_co2e: res.total_kg_co2e,
-          confidence: res.confidence,
-          missing_factors_count: res.missing_factors.length,
-          warnings_count: res.warnings.length,
-          updated_at: c.updated_at,
-        });
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        console.error(`Dashboard summary skipped craft ${c.craft_id}:`, e);
-
-        // Don’t crash the endpoint because one craft config is weird.
-        out.push({
-          craft_id: c.craft_id,
-          craft_name: c.craft_name,
-          category: c.category,
-          total_kg_co2e: 0,
-          confidence: "low",
-          missing_factors_count: 0,
-          warnings_count: 1,
-          updated_at: c.updated_at,
-          error: msg,
-        });
-      }
-    }
-
-    // sort: worst confidence first, then highest emissions
-    return out.sort((a, b) => {
-      const rank = (x: ConfidenceLevel) => (x === "low" ? 0 : x === "medium" ? 1 : 2);
-      const d = rank(a.confidence) - rank(b.confidence);
-      if (d !== 0) return d;
-      return b.total_kg_co2e - a.total_kg_co2e;
-    });
+  static async delete(id: number): Promise<void> {
+    await CarbonFactorLibraryService.getById(id);
+    await CarbonFactorLibraryModel.delete(id);
   }
 }
 
-/** ---------------- Helpers ---------------- */
+// =============================================================
+// UserCalculatorService — user-facing calculation engine
+// =============================================================
 
-function parseCalculatorConfig(craft: CraftCalculatorRow): CalculatorConfig {
-  const cfg = craft.config;
+export class UserCalculatorService {
+  // Returns the form config for a product's calculator
+  static async getConfig(
+    productId: number,
+    type: CalculatorType
+  ): Promise<CalculatorConfigResponse> {
+    const product = await ProductModel.findById(productId);
+    if (!product) throw new NotFoundError(`Product ${productId} not found`);
 
-  if (!isPlainObject(cfg)) throw new Error(`Invalid config JSON for craft ${craft.craft_id}`);
-
-  const factor_map = cfg["factor_map"];
-  const options = cfg["options"];
-  const calculation = cfg["calculation"];
-
-  if (!isPlainObject(factor_map)) throw new Error(`Missing factor_map for ${craft.craft_id}`);
-  if (!isPlainObject(options)) throw new Error(`Missing options for ${craft.craft_id}`);
-  if (!isPlainObject(calculation)) throw new Error(`Missing calculation for ${craft.craft_id}`);
-
-  const componentsRaw = calculation["components"];
-  if (!Array.isArray(componentsRaw)) throw new Error(`calculation.components must be array for ${craft.craft_id}`);
-
-  const components: CalcComponent[] = componentsRaw.map((x) => {
-    if (!isPlainObject(x)) throw new Error(`Bad component item in ${craft.craft_id}`);
-
-    const name = asString(x["name"]);
-    const apply = asString(x["apply"]) as ApplyType;
-
-    const factor_field = asString(x["factor_field"]);
-    const factor_type = asString(x["factor_type"]);
-
-    const fixed = x["factor_fixed"];
-    const factor_fixed =
-      isPlainObject(fixed)
-        ? { factor_type: asString(fixed["factor_type"]), factor_key: asString(fixed["factor_key"]) }
-        : undefined;
-
-    const hasFieldRef = factor_field.length > 0; // factor_type may be overridden by factor_map
-    const hasFixedRef = !!factor_fixed?.factor_type && !!factor_fixed?.factor_key;
-
-    if (!name || !apply || (!hasFieldRef && !hasFixedRef)) {
-      throw new Error(`Invalid component in ${craft.craft_id}`);
+    const calc = await CalculatorModel.findByProductIdAndType(productId, type);
+    if (!calc || calc.status !== "active") {
+      throw new NotFoundError(
+        `No active ${type} calculator found for product ${productId}`
+      );
     }
 
+    const config = parseConfig(calc.config);
+
     return {
-      name,
-      apply,
-      ...(hasFieldRef ? { factor_field, factor_type: factor_type || undefined } : {}),
-      ...(hasFixedRef ? { factor_fixed } : {}),
+      calculator_id: calc.id,
+      type: calc.type,
+      name: calc.name,
+      description: calc.description,
+      fields: config.fields,
+      formula: config.formula ?? null,
+      rating_thresholds: config.rating_thresholds ?? null,
     };
-  });
+  }
 
-  const modifiersRaw = calculation["modifiers"];
-  const modifiers: CalcModifier[] | undefined = Array.isArray(modifiersRaw)
-    ? modifiersRaw.map((x) => {
-        if (!isPlainObject(x)) throw new Error(`Bad modifier item in ${craft.craft_id}`);
-        const name = asString(x["name"]);
-        const factor_field = asString(x["factor_field"]);
-        const factor_type = asString(x["factor_type"]);
-        if (!name || !factor_field) throw new Error(`Invalid modifier in ${craft.craft_id}`);
-        return {
-          name,
-          apply: "percent_on_subtotal",
-          factor_field,
-          factor_type: factor_type || undefined, // can be overridden by factor_map
-        };
-      })
-    : undefined;
+  // Runs the calculation and returns full result with breakdown
+  static async calculate(input: UserCalculationInput): Promise<CalculationResult> {
+    const calc = await CalculatorModel.findByProductIdAndType(
+      input.product_id,
+      input.calculator_type
+    );
 
-  const aliases = isPlainObject(cfg["aliases"]) ? (cfg["aliases"] as Record<string, Record<string, string>>) : undefined;
+    if (!calc || calc.status !== "active") {
+      throw new NotFoundError(
+        `No active ${input.calculator_type} calculator found for product ${input.product_id}`
+      );
+    }
+    const config = parseConfig(calc.config);
 
-  return {
-    craft_id: typeof cfg["craft_id"] === "string" ? cfg["craft_id"] : undefined,
-    aliases,
-    factor_map: factor_map as Record<string, string>,
-    options: options as Record<string, Array<{ label?: string; value: string }>>,
-    modes: cfg["modes"],
-    calculation: { components, modifiers },
-  };
-}
-
-/**
- * Prefer factor_map[field] because DB configs may have incorrect component.factor_type.
- * This makes backend tolerant without DB edits.
- */
-function resolveFactorType(cfg: CalculatorConfig, field: string, fallback?: string): string | null {
-  const mapped = cfg.factor_map[field];
-  if (typeof mapped === "string" && mapped.trim().length > 0) return mapped.trim();
-  if (typeof fallback === "string" && fallback.trim().length > 0) return fallback.trim();
-  return null;
-}
-
-function normalizeInputs(
-  inputs: Record<string, unknown>,
-  aliases?: Record<string, Record<string, string>>,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-
-  for (const [k, v] of Object.entries(inputs)) {
-    if (typeof v === "string") {
-      const trimmed = v.trim();
-      out[k] = applyAlias(k, trimmed, aliases);
-    } else if (Array.isArray(v)) {
-      const arr = v
-        .map((x) => (typeof x === "string" ? applyAlias(k, x.trim(), aliases) : null))
-        .filter((x): x is string => typeof x === "string" && x.length > 0);
-      out[k] = arr;
+    if (input.calculator_type === "carbon") {
+      return runCarbonCalculation(config, input.inputs);
     } else {
-      out[k] = v;
+      return runScoreCalculation(config, input.inputs);
+    }
+  }
+}
+
+// =============================================================
+// Calculation engines
+// =============================================================
+
+function runCarbonCalculation(
+  config: CalculatorConfig,
+  inputs: Record<string, unknown>
+): CarbonCalculationResult {
+  const warnings: string[] = [];
+  const breakdown: BreakdownItem[] = [];
+  const modifiers: CarbonCalculationResult["modifiers"] = [];
+
+  if (!config.formula) {
+    throw new Error("This calculator has no formula configured");
+  }
+
+  const formula = config.formula;
+
+  // Build field lookup map for quick access
+  const fieldMap = new Map(config.fields.map((f) => [f.key, f]));
+
+  // Resolve weight
+  const weightKg = resolveWeight(inputs, formula.weight_field, warnings);
+
+  let subtotal = 0;
+
+  // --- Base field ---
+  const baseField = fieldMap.get(formula.base_field);
+  if (baseField) {
+    const result = applyFieldValue(baseField, inputs, weightKg, warnings);
+    if (result) {
+      breakdown.push(result);
+      subtotal += result.co2_value;
+    }
+  } else {
+    warnings.push(`Base field "${formula.base_field}" not found in config`);
+  }
+
+  // --- Additives ---
+  for (const key of formula.additives) {
+    const field = fieldMap.get(key);
+    if (!field) {
+      warnings.push(`Additive field "${key}" not found in config`);
+      continue;
+    }
+    const result = applyFieldValue(field, inputs, weightKg, warnings);
+    if (result) {
+      breakdown.push(result);
+      subtotal += result.co2_value;
     }
   }
 
-  return out;
-}
+  // --- Percent modifiers ---
+  let percentSum = 0;
 
-function applyAlias(field: string, value: string, aliases?: Record<string, Record<string, string>>): string {
-  if (!aliases) return value;
-  const map = aliases[field];
-  if (!map) return value;
-  return map[value] ?? value;
-}
-
-function resolveWeightKg(
-  mode: CalculatorMode,
-  inputs: Record<string, unknown>,
-  cfg: CalculatorConfig,
-): { weightKg: number | null; warnings: CalculationWarning[] } {
-  const warnings: CalculationWarning[] = [];
-
-  if (mode === "detailed") {
-    const w = inputs["weight_g"];
-    const grams = toNumber(w);
-    if (grams === null) {
-      warnings.push({ code: "missing_weight", message: "weight_g is required in detailed mode", field: "weight_g" });
-      return { weightKg: null, warnings };
-    }
-    if (grams <= 0) warnings.push({ code: "invalid_weight", message: "weight_g must be > 0", field: "weight_g" });
-    return { weightKg: grams > 0 ? grams / 1000 : null, warnings };
-  }
-
-  // estimated: try cfg.modes.estimated.weight_defaults_g
-  const modes = cfg.modes;
-  if (!isPlainObject(modes)) {
-    warnings.push({ code: "missing_weight_defaults", message: "No modes config found for weight defaults" });
-    return { weightKg: null, warnings };
-  }
-
-  const est = modes["estimated"];
-  if (!isPlainObject(est)) {
-    warnings.push({ code: "missing_weight_defaults", message: "No estimated mode config found" });
-    return { weightKg: null, warnings };
-  }
-
-  const wd = est["weight_defaults_g"];
-  if (!isPlainObject(wd)) {
-    warnings.push({ code: "missing_weight_defaults", message: "weight_defaults_g missing for estimated mode" });
-    return { weightKg: null, warnings };
-  }
-
-  // detect a "size selector"
-  const sizeKeyCandidates = ["product_line_size", "jacket_type", "bag_size", "jewelry_type", "size_preset", "product_type"];
-  let selector: string | null = null;
-  for (const k of sizeKeyCandidates) {
-    if (typeof inputs[k] === "string") {
-      selector = (inputs[k] as string).trim();
-      break;
-    }
-  }
-
-  if (!selector) {
-    warnings.push({ code: "missing_size_selector", message: "No size selector found to resolve estimated weight" });
-    return { weightKg: null, warnings };
-  }
-
-  const entry = wd[selector];
-  if (!isPlainObject(entry)) {
-    warnings.push({
-      code: "missing_weight_default_for_selection",
-      message: `No weight default found for: ${selector}`,
-    });
-    return { weightKg: null, warnings };
-  }
-
-  const avg = toNumber(entry["avg"]);
-  if (avg === null) {
-    warnings.push({ code: "invalid_weight_default", message: `Invalid avg weight for ${selector}` });
-    return { weightKg: null, warnings };
-  }
-
-  return { weightKg: avg / 1000, warnings };
-}
-
-function collectFactorRequests(cfg: CalculatorConfig, inputs: Record<string, unknown>) {
-  const requests: Array<{ factor_type: string; factor_key: string }> = [];
-
-  const push = (factor_type: string, factor_key: string) => {
-    if (!factor_type || !factor_key) return;
-    requests.push({ factor_type, factor_key });
-  };
-
-  // components
-  for (const comp of cfg.calculation.components) {
-    if (comp.factor_fixed) {
-      push(comp.factor_fixed.factor_type, comp.factor_fixed.factor_key);
+  for (const key of formula.percent_modifiers) {
+    const field = fieldMap.get(key);
+    if (!field) {
+      warnings.push(`Modifier field "${key}" not found in config`);
       continue;
     }
 
-    if (!comp.factor_field) continue;
-    const factorType = resolveFactorType(cfg, comp.factor_field, comp.factor_type);
-    if (!factorType) continue;
-
-    const { keys } = resolveSelectedKeys(comp.factor_field, inputs);
-    for (const key of keys) push(factorType, key);
+    const selected = resolveSelectedOptions(field, inputs);
+    for (const opt of selected) {
+      percentSum += opt.value;
+      modifiers.push({
+        field_key: field.key,
+        field_label: field.label,
+        selected_option: opt.label,
+        percent: opt.value,
+      });
+    }
   }
 
-  // modifiers
-  const modifiers = cfg.calculation.modifiers ?? [];
-  for (const mod of modifiers) {
-    const factorType = resolveFactorType(cfg, mod.factor_field, mod.factor_type);
-    if (!factorType) continue;
+  const total = round4(subtotal * (1 + percentSum / 100));
 
-    const { keys } = resolveSelectedKeys(mod.factor_field, inputs);
-    for (const key of keys) push(factorType, key);
+  // --- Reduction tips: flag fields contributing > 30% of subtotal ---
+  for (const item of breakdown) {
+    if (subtotal > 0 && item.co2_value / subtotal > 0.3) {
+      item.reduction_tip = buildReductionTip(item.field_key, item.selected_option, config);
+    }
   }
 
-  // dedupe
-  const seen = new Set<string>();
-  return requests.filter((r) => {
-    const k = `${r.factor_type}::${r.factor_key}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+  // --- Placement ---
+  const placement = resolvePlacement(config.placements ?? [], total);
+
+  // --- Confidence ---
+  const confidence = inferConfidence(breakdown.length, warnings.length);
+
+  return {
+    total_kg_co2e: total,
+    breakdown,
+    modifiers,
+    placement,
+    confidence,
+    warnings,
+  };
 }
 
-function buildFactorLookup(rows: CarbonFactorRow[]) {
-  const map = new Map<string, CarbonFactorRow>();
-  for (const r of rows) {
-    map.set(`${r.factor_type}::${r.factor_key}`, r);
+function runScoreCalculation(
+  config: CalculatorConfig,
+  inputs: Record<string, unknown>
+): ScoreCalculationResult {
+  const breakdown: ScoreCalculationResult["breakdown"] = [];
+  let totalScore = 0;
+
+  for (const field of config.fields) {
+    if (field.role === "informational") continue;
+
+    const selected = resolveSelectedOptions(field, inputs);
+    for (const opt of selected) {
+      breakdown.push({
+        field_key: field.key,
+        field_label: field.label,
+        selected_option: opt.label,
+        score: opt.value,
+      });
+      totalScore += opt.value;
+    }
   }
-  return map;
+
+  const thresholds = config.rating_thresholds ?? [];
+  const sorted = [...thresholds].sort((a, b) => a.max_score - b.max_score);
+  const match = sorted.find((t) => totalScore <= t.max_score);
+
+  return {
+    total_score: round4(totalScore),
+    rating: match?.label ?? "Unknown",
+    color: match?.color ?? "gray",
+    breakdown,
+  };
 }
 
-function resolveSelectedKeys(field: string, inputs: Record<string, unknown>): { keys: string[]; err?: string } {
-  const v = inputs[field];
-  if (typeof v === "string" && v.trim()) return { keys: [v.trim()] };
-  if (Array.isArray(v)) {
-    const keys = v.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((x) => x.trim());
-    return { keys };
+// =============================================================
+// Calculation helpers
+// =============================================================
+
+function resolveWeight(
+  inputs: Record<string, unknown>,
+  weightField: string | undefined,
+  warnings: string[]
+): number | null {
+  if (!weightField) return null;
+
+  const raw = inputs[weightField];
+  if (typeof raw === "number" && raw > 0) return raw;
+  if (typeof raw === "string") {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return n;
   }
-  return { keys: [], err: `Missing selection for field: ${field}` };
+
+  warnings.push(
+    `Weight field "${weightField}" missing or invalid — weight-based calculation skipped`
+  );
+  return null;
 }
 
-function applyFactor(
-  comp: { name: string; apply: ApplyType; factor_type: string; factor_field: string },
-  factorKey: string,
-  lookup: Map<string, CarbonFactorRow>,
+function resolveSelectedOptions(
+  field: { key: string; options: FieldOption[]; type: string },
+  inputs: Record<string, unknown>
+): FieldOption[] {
+  const optMap = new Map(field.options.map((o) => [o.label.toLowerCase().trim(), o]));
+  const raw = inputs[field.key ?? ""];
+
+  if (typeof raw === "string") {
+    const opt = optMap.get(raw.toLowerCase().trim());
+    return opt ? [opt] : [];
+  }
+
+  if (Array.isArray(raw)) {
+    const results: FieldOption[] = [];
+    for (const v of raw) {
+      if (typeof v === "string") {
+        const opt = optMap.get(v.toLowerCase().trim());
+        if (opt) results.push(opt);
+      }
+    }
+    return results;
+  }
+
+  return [];
+}
+
+function applyFieldValue(
+  field: { key: string; label: string; type: string; role: string; options: FieldOption[] },
+  inputs: Record<string, unknown>,
   weightKg: number | null,
-  areaM2: number | null,
-  warnings: CalculationWarning[],
-  missing: Array<{ factor_type: string; factor_key: string; reason: string }>,
-): CalculationComponentBreakdown | null {
-  const f = lookup.get(`${comp.factor_type}::${factorKey}`);
-  if (!f) {
-    missing.push({ factor_type: comp.factor_type, factor_key: factorKey, reason: "factor_not_found" });
+  warnings: string[]
+): BreakdownItem | null {
+  const selected = resolveSelectedOptions(field, inputs);
+
+  if (selected.length === 0) {
+    warnings.push(`No selection found for field "${field.key}"`);
     return null;
   }
 
-  const val = numericOrZero(f.value);
+  const opt = selected[0]!;
+  let co2Value = opt.value;
 
-  const expectedUnit = expectedUnitForApply(comp.apply);
-  if (expectedUnit && f.unit !== expectedUnit) {
-    warnings.push({
-      code: "unit_mismatch",
-      message: `Component ${comp.name} expects ${expectedUnit} but got ${f.unit} (${comp.factor_type}/${factorKey})`,
-      field: comp.factor_field,
-    });
-    missing.push({ factor_type: comp.factor_type, factor_key: factorKey, reason: "unit_mismatch" });
-    return null;
-  }
-
-  let co2 = 0;
-
-  switch (comp.apply) {
-    case "weight_based": {
-      if (weightKg === null) {
-        warnings.push({ code: "missing_weight", message: `Weight missing for ${comp.name}`, field: comp.factor_field });
-        return null;
-      }
-      co2 = weightKg * val;
-      break;
-    }
-    case "area_based": {
-      if (areaM2 === null) {
-        warnings.push({ code: "missing_area", message: `Area missing for ${comp.name}`, field: comp.factor_field });
-        return null;
-      }
-      co2 = areaM2 * val;
-      break;
-    }
-    case "per_item":
-    case "per_shipment":
-    case "multi_per_item": {
-      co2 = val;
-      break;
-    }
-    case "percent_on_subtotal": {
-      return null; // handled elsewhere
-    }
-    default: {
-      warnings.push({ code: "unknown_apply", message: `Unknown apply type: ${comp.apply}`, field: comp.factor_field });
-      return null;
+  // If unit contains "per_kg", multiply by weight
+  if (opt.unit.includes("per_kg")) {
+    if (weightKg === null) {
+      warnings.push(
+        `Field "${field.key}" requires weight but none provided — using raw value`
+      );
+    } else {
+      co2Value = round4(opt.value * weightKg);
     }
   }
 
   return {
-    name: comp.name,
-    factor_type: comp.factor_type,
-    factor_key: factorKey,
-    unit: f.unit,
-    value: val,
-    applied_as: comp.apply,
-    co2: round4(co2),
+    field_key: field.key,
+    field_label: field.label,
+    selected_option: opt.label,
+    co2_value: co2Value,
+    unit: opt.unit,
+    role: field.role as BreakdownItem["role"],
+    justification: opt.justification,
   };
 }
 
-function expectedUnitForApply(apply: ApplyType): FactorUnit | null {
-  switch (apply) {
-    case "weight_based":
-      return "kg_per_kg";
-    case "area_based":
-      return "kg_per_m2";
-    case "per_item":
-    case "multi_per_item":
-      return "kg_per_item";
-    case "per_shipment":
-      return "kg_per_shipment";
-    default:
-      return null;
+function buildReductionTip(
+  fieldKey: string,
+  selectedOption: string,
+  config: CalculatorConfig
+): string {
+  const field = config.fields.find((f) => f.key === fieldKey);
+  if (!field) return "";
+
+  // Find the option with lowest co2 value in the same field
+  const sorted = [...field.options].sort((a, b) => a.value - b.value);
+  const lowest = sorted[0];
+
+  if (!lowest || lowest.label === selectedOption) return "";
+
+  return `Switching to "${lowest.label}" could significantly reduce this component's footprint`;
+}
+
+function resolvePlacement(
+  placements: Placement[],
+  totalCo2: number
+): PlacementResult | null {
+  const sorted = [...placements].sort(
+    (a, b) => a.display_order - b.display_order
+  );
+
+  for (const p of sorted) {
+    const c = p.condition;
+
+    if (c.always) return toPlacementResult(p);
+    if (c.co2_above !== undefined && totalCo2 > c.co2_above) return toPlacementResult(p);
+    if (c.co2_below !== undefined && totalCo2 < c.co2_below) return toPlacementResult(p);
   }
-}
 
-function inferConfidence(args: {
-  mode: CalculatorMode;
-  missingCount: number;
-  factorConfidences: Array<"low" | "medium" | "high">;
-  warningsCount: number;
-}): ConfidenceLevel {
-  if (args.missingCount > 0) return "low";
-
-  const lowCount = args.factorConfidences.filter((x) => x === "low").length;
-  const total = args.factorConfidences.length || 1;
-
-  const lowRatio = lowCount / total;
-
-  if (args.mode === "detailed" && args.warningsCount === 0 && lowRatio <= 0.2) return "high";
-  if (lowRatio <= 0.5) return "medium";
-  return "low";
-}
-
-function extractConfidenceLevels(rows: CarbonFactorRow[]): Array<"low" | "medium" | "high"> {
-  const out: Array<"low" | "medium" | "high"> = [];
-  for (const r of rows) {
-    const meta = r.meta;
-    if (isPlainObject(meta) && typeof meta["confidence"] === "string") {
-      const c = meta["confidence"].toLowerCase();
-      if (c === "high" || c === "medium" || c === "low") out.push(c);
-    }
-  }
-  return out;
-}
-
-function extractEstimatedDefaults(cfg: CalculatorConfig): Record<string, unknown> {
-  if (!isPlainObject(cfg.modes)) return {};
-  const est = cfg.modes["estimated"];
-  if (!isPlainObject(est)) return {};
-  const def = est["defaults"];
-  if (!isPlainObject(def)) return {};
-  return { ...def };
-}
-
-function numericOrZero(v: string | null): number {
-  if (v === null) return 0;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function toNumber(v: unknown): number | null {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string" && v.trim()) {
-    const n = Number(v.trim());
-    return Number.isFinite(n) ? n : null;
-  }
   return null;
 }
 
-function round4(n: number): number {
-  return Math.round(n * 10000) / 10000;
+function toPlacementResult(p: Placement): PlacementResult {
+  return {
+    headline: p.headline,
+    body: p.body,
+    cta_label: p.cta_label,
+    cta_url: p.cta_url,
+  };
 }
 
-function asString(v: unknown): string {
-  return typeof v === "string" ? v : "";
+function inferConfidence(
+  breakdownCount: number,
+  warningsCount: number
+): ConfidenceLevel {
+  if (warningsCount > 2 || breakdownCount === 0) return "low";
+  if (warningsCount > 0) return "medium";
+  return "high";
 }
 
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
+// =============================================================
+// Config parser — safely extracts CalculatorConfig from JSONB
+// =============================================================
+
+function parseConfig(raw: unknown): CalculatorConfig {
+  if (!isPlainObject(raw)) throw new Error("Calculator config is invalid");
+
+  const result = validateCalculatorConfig(raw);
+  if (!result.valid || !result.config) {
+    throw new Error(
+      `Calculator config failed validation: ${result.errors.map((e) => e.message).join(", ")}`
+    );
+  }
+
+  return result.config;
+}
+
+// =============================================================
+// Custom error classes
+// =============================================================
+
+export class NotFoundError extends Error {
+  readonly statusCode = 404;
+  constructor(message: string) {
+    super(message);
+    this.name = "NotFoundError";
+  }
+}
+
+export class ValidationError extends Error {
+  readonly statusCode = 400;
+  readonly details: Array<{ path: string; message: string }>;
+
+  constructor(
+    message: string,
+    details: Array<{ path: string; message: string }>
+  ) {
+    super(message);
+    this.name = "ValidationError";
+    this.details = details;
+  }
 }

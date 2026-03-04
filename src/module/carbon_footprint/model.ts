@@ -1,287 +1,619 @@
 import { db } from "../../config/db.ts";
+import type {
+  CarbonFactorLibraryRow,
+  CategoryRow,
+  CalculatorRow,
+  CreateCarbonFactorInput,
+  CreateCalculatorInput,
+  CreateCategoryInput,
+  CreateProductInput,
+  CreateSubcategoryInput,
+  PaginationParams,
+  ProductRow,
+  SubcategoryRow,
+  UpdateCarbonFactorInput,
+  UpdateCalculatorInput,
+  UpdateCategoryInput,
+  UpdateProductInput,
+  UpdateSubcategoryInput,
+} from "./types.ts";
 
-/** ---------------- Types ---------------- */
+// =============================================================
+// CategoryModel
+// =============================================================
 
-export type CalculatorMode = "estimated" | "detailed";
-
-export type FactorUnit =
-  | "kg_per_kg"
-  | "kg_per_item"
-  | "kg_per_shipment"
-  | "kg_per_m2"
-  | "percent"
-  | "config";
-
-export interface CarbonFactorRow {
-  id: number;
-  factor_type: string;
-  factor_key: string;
-  display_name: string;
-  unit: FactorUnit;
-  value: string | null; // pg numeric comes back as string
-  meta: unknown; // stored as JSONB
-  is_active: boolean;
-  updated_at: string; // timestamp
-}
-
-export interface CraftCalculatorRow {
-  craft_id: string;
-  craft_name: string;
-  category: string | null;
-  config: unknown; // JSONB
-  is_active: boolean;
-  updated_at: string;
-}
-
-export interface CraftCalculatorListRow {
-  craft_id: string;
-  craft_name: string;
-  category: string | null;
-  updated_at: string;
-}
-
-export interface CarbonCalculationRow {
-  id: number;
-  craft_id: string;
-  mode: CalculatorMode;
-  inputs: unknown;
-  result: unknown;
-  created_at: string;
-}
-
-/** ---------------- Models ---------------- */
-
-export class CraftCalculatorModel {
-  static async listActive(): Promise<CraftCalculatorListRow[]> {
+export class CategoryModel {
+  static async create(input: CreateCategoryInput): Promise<CategoryRow> {
     const q = `
-      SELECT craft_id, craft_name, category, updated_at
-      FROM public.craft_calculators
-      WHERE is_active = true
-      ORDER BY category NULLS LAST, craft_name ASC
+      INSERT INTO content.categories
+        (name, slug, display_order, icon, status)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, name, slug, display_order, icon, status, created_at, updated_at
     `;
-    const r = await db.query<CraftCalculatorListRow>(q);
+    const r = await db.query<CategoryRow>(q, [
+      input.name,
+      input.slug,
+      input.display_order ?? 0,
+      input.icon ?? null,
+      input.status ?? "active",
+    ]);
+    return r.rows[0]!;
+  }
+
+  static async findAll(params: PaginationParams): Promise<CategoryRow[]> {
+    const q = `
+      SELECT id, name, slug, display_order, icon, status, created_at, updated_at
+      FROM content.categories
+      ORDER BY display_order ASC, name ASC
+      LIMIT $1 OFFSET $2
+    `;
+    const r = await db.query<CategoryRow>(q, [params.limit, params.offset]);
     return r.rows;
   }
 
-  static async getById(craftId: string): Promise<CraftCalculatorRow | null> {
+  static async countAll(): Promise<number> {
+    const r = await db.query<{ count: string }>(
+      "SELECT COUNT(*)::text AS count FROM content.categories"
+    );
+    return parseInt(r.rows[0]!.count, 10);
+  }
+
+  static async findById(id: number): Promise<CategoryRow | null> {
     const q = `
-      SELECT craft_id, craft_name, category, config, is_active, updated_at
-      FROM public.craft_calculators
-      WHERE craft_id = $1
+      SELECT id, name, slug, display_order, icon, status, created_at, updated_at
+      FROM content.categories
+      WHERE id = $1
       LIMIT 1
     `;
-    const r = await db.query<CraftCalculatorRow>(q, [craftId]);
+    const r = await db.query<CategoryRow>(q, [id]);
     return r.rows[0] ?? null;
   }
 
-  static async upsert(args: {
-    craft_id: string;
-    craft_name: string;
-    category: string | null;
-    config: unknown;
-    is_active: boolean;
-  }): Promise<CraftCalculatorRow> {
+  static async findBySlug(slug: string): Promise<CategoryRow | null> {
     const q = `
-      INSERT INTO public.craft_calculators (craft_id, craft_name, category, config, is_active, updated_at)
-      VALUES ($1, $2, $3, $4::jsonb, $5, now())
-      ON CONFLICT (craft_id)
-      DO UPDATE SET
-        craft_name = EXCLUDED.craft_name,
-        category   = EXCLUDED.category,
-        config     = EXCLUDED.config,
-        is_active  = EXCLUDED.is_active,
-        updated_at = now()
-      RETURNING craft_id, craft_name, category, config, is_active, updated_at
+      SELECT id, name, slug, display_order, icon, status, created_at, updated_at
+      FROM content.categories
+      WHERE slug = $1
+      LIMIT 1
     `;
-    const values = [
-      args.craft_id,
-      args.craft_name,
-      args.category,
-      JSON.stringify(args.config),
-      args.is_active,
-    ];
-    const r = await db.query<CraftCalculatorRow>(q, values);
-    return r.rows[0]!;
+    const r = await db.query<CategoryRow>(q, [slug]);
+    return r.rows[0] ?? null;
+  }
+
+  static async update(
+    id: number,
+    input: UpdateCategoryInput
+  ): Promise<CategoryRow | null> {
+    const sets: string[] = [];
+    const values: unknown[] = [];
+    let i = 1;
+
+    if (input.name !== undefined) {
+      sets.push(`name = $${i++}`);
+      values.push(input.name);
+    }
+    if (input.slug !== undefined) {
+      sets.push(`slug = $${i++}`);
+      values.push(input.slug);
+    }
+    if (input.display_order !== undefined) {
+      sets.push(`display_order = $${i++}`);
+      values.push(input.display_order);
+    }
+    if (input.icon !== undefined) {
+      sets.push(`icon = $${i++}`);
+      values.push(input.icon);
+    }
+    if (input.status !== undefined) {
+      sets.push(`status = $${i++}`);
+      values.push(input.status);
+    }
+
+    if (sets.length === 0) return CategoryModel.findById(id);
+
+    values.push(id);
+    const q = `
+      UPDATE content.categories
+      SET ${sets.join(", ")}
+      WHERE id = $${i}
+      RETURNING id, name, slug, display_order, icon, status, created_at, updated_at
+    `;
+    const r = await db.query<CategoryRow>(q, values);
+    return r.rows[0] ?? null;
+  }
+
+  static async delete(id: number): Promise<boolean> {
+    const r = await db.query(
+      "DELETE FROM content.categories WHERE id = $1",
+      [id]
+    );
+    return (r.rowCount ?? 0) > 0;
   }
 }
 
-export class CarbonFactorModel {
-  static async list(args: {
-    factor_type?: string;
+// =============================================================
+// SubcategoryModel
+// =============================================================
+
+export class SubcategoryModel {
+  static async create(
+    input: CreateSubcategoryInput
+  ): Promise<SubcategoryRow> {
+    const q = `
+      INSERT INTO content.subcategories
+        (category_id, name, slug, display_order, status)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, category_id, name, slug, display_order, status, created_at, updated_at
+    `;
+    const r = await db.query<SubcategoryRow>(q, [
+      input.category_id,
+      input.name,
+      input.slug,
+      input.display_order ?? 0,
+      input.status ?? "active",
+    ]);
+    return r.rows[0]!;
+  }
+
+  static async findByCategoryId(
+    categoryId: number,
+    params: PaginationParams
+  ): Promise<SubcategoryRow[]> {
+    const q = `
+      SELECT id, category_id, name, slug, display_order, status, created_at, updated_at
+      FROM content.subcategories
+      WHERE category_id = $1
+      ORDER BY display_order ASC, name ASC
+      LIMIT $2 OFFSET $3
+    `;
+    const r = await db.query<SubcategoryRow>(q, [
+      categoryId,
+      params.limit,
+      params.offset,
+    ]);
+    return r.rows;
+  }
+
+  static async countByCategoryId(categoryId: number): Promise<number> {
+    const r = await db.query<{ count: string }>(
+      "SELECT COUNT(*)::text AS count FROM content.subcategories WHERE category_id = $1",
+      [categoryId]
+    );
+    return parseInt(r.rows[0]!.count, 10);
+  }
+
+  static async findById(id: number): Promise<SubcategoryRow | null> {
+    const q = `
+      SELECT id, category_id, name, slug, display_order, status, created_at, updated_at
+      FROM content.subcategories
+      WHERE id = $1
+      LIMIT 1
+    `;
+    const r = await db.query<SubcategoryRow>(q, [id]);
+    return r.rows[0] ?? null;
+  }
+
+  static async findBySlug(slug: string): Promise<SubcategoryRow | null> {
+    const q = `
+      SELECT id, category_id, name, slug, display_order, status, created_at, updated_at
+      FROM content.subcategories
+      WHERE slug = $1
+      LIMIT 1
+    `;
+    const r = await db.query<SubcategoryRow>(q, [slug]);
+    return r.rows[0] ?? null;
+  }
+
+  static async update(
+    id: number,
+    input: UpdateSubcategoryInput
+  ): Promise<SubcategoryRow | null> {
+    const sets: string[] = [];
+    const values: unknown[] = [];
+    let i = 1;
+
+    if (input.name !== undefined) { sets.push(`name = $${i++}`); values.push(input.name); }
+    if (input.slug !== undefined) { sets.push(`slug = $${i++}`); values.push(input.slug); }
+    if (input.display_order !== undefined) { sets.push(`display_order = $${i++}`); values.push(input.display_order); }
+    if (input.status !== undefined) { sets.push(`status = $${i++}`); values.push(input.status); }
+
+    if (sets.length === 0) return SubcategoryModel.findById(id);
+
+    values.push(id);
+    const q = `
+      UPDATE content.subcategories
+      SET ${sets.join(", ")}
+      WHERE id = $${i}
+      RETURNING id, category_id, name, slug, display_order, status, created_at, updated_at
+    `;
+    const r = await db.query<SubcategoryRow>(q, values);
+    return r.rows[0] ?? null;
+  }
+
+  static async delete(id: number): Promise<boolean> {
+    const r = await db.query(
+      "DELETE FROM content.subcategories WHERE id = $1",
+      [id]
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+}
+
+// =============================================================
+// ProductModel
+// =============================================================
+
+export class ProductModel {
+  static async create(input: CreateProductInput): Promise<ProductRow> {
+    const q = `
+      INSERT INTO content.products
+        (subcategory_id, name, slug, description, image_url, ecommerce_url, display_order, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING id, subcategory_id, name, slug, description, image_url, ecommerce_url,
+                display_order, status, created_at, updated_at
+    `;
+    const r = await db.query<ProductRow>(q, [
+      input.subcategory_id,
+      input.name,
+      input.slug,
+      input.description ?? null,
+      input.image_url ?? null,
+      input.ecommerce_url ?? null,
+      input.display_order ?? 0,
+      input.status ?? "active",
+    ]);
+    return r.rows[0]!;
+  }
+
+  static async findBySubcategoryId(
+    subcategoryId: number,
+    params: PaginationParams
+  ): Promise<ProductRow[]> {
+    const q = `
+      SELECT id, subcategory_id, name, slug, description, image_url, ecommerce_url,
+             display_order, status, created_at, updated_at
+      FROM content.products
+      WHERE subcategory_id = $1
+      ORDER BY display_order ASC, name ASC
+      LIMIT $2 OFFSET $3
+    `;
+    const r = await db.query<ProductRow>(q, [
+      subcategoryId,
+      params.limit,
+      params.offset,
+    ]);
+    return r.rows;
+  }
+
+  static async countBySubcategoryId(subcategoryId: number): Promise<number> {
+    const r = await db.query<{ count: string }>(
+      "SELECT COUNT(*)::text AS count FROM content.products WHERE subcategory_id = $1",
+      [subcategoryId]
+    );
+    return parseInt(r.rows[0]!.count, 10);
+  }
+
+  static async findById(id: number): Promise<ProductRow | null> {
+    const q = `
+      SELECT id, subcategory_id, name, slug, description, image_url, ecommerce_url,
+             display_order, status, created_at, updated_at
+      FROM content.products
+      WHERE id = $1
+      LIMIT 1
+    `;
+    const r = await db.query<ProductRow>(q, [id]);
+    return r.rows[0] ?? null;
+  }
+
+  static async findBySlug(slug: string): Promise<ProductRow | null> {
+    const q = `
+      SELECT id, subcategory_id, name, slug, description, image_url, ecommerce_url,
+             display_order, status, created_at, updated_at
+      FROM content.products
+      WHERE slug = $1
+      LIMIT 1
+    `;
+    const r = await db.query<ProductRow>(q, [slug]);
+    return r.rows[0] ?? null;
+  }
+
+  static async update(
+    id: number,
+    input: UpdateProductInput
+  ): Promise<ProductRow | null> {
+    const sets: string[] = [];
+    const values: unknown[] = [];
+    let i = 1;
+
+    if (input.name !== undefined) { sets.push(`name = $${i++}`); values.push(input.name); }
+    if (input.slug !== undefined) { sets.push(`slug = $${i++}`); values.push(input.slug); }
+    if (input.description !== undefined) { sets.push(`description = $${i++}`); values.push(input.description); }
+    if (input.image_url !== undefined) { sets.push(`image_url = $${i++}`); values.push(input.image_url); }
+    if (input.ecommerce_url !== undefined) { sets.push(`ecommerce_url = $${i++}`); values.push(input.ecommerce_url); }
+    if (input.display_order !== undefined) { sets.push(`display_order = $${i++}`); values.push(input.display_order); }
+    if (input.status !== undefined) { sets.push(`status = $${i++}`); values.push(input.status); }
+
+    if (sets.length === 0) return ProductModel.findById(id);
+
+    values.push(id);
+    const q = `
+      UPDATE content.products
+      SET ${sets.join(", ")}
+      WHERE id = $${i}
+      RETURNING id, subcategory_id, name, slug, description, image_url, ecommerce_url,
+                display_order, status, created_at, updated_at
+    `;
+    const r = await db.query<ProductRow>(q, values);
+    return r.rows[0] ?? null;
+  }
+
+  static async delete(id: number): Promise<boolean> {
+    const r = await db.query(
+      "DELETE FROM content.products WHERE id = $1",
+      [id]
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+}
+
+// =============================================================
+// CalculatorModel
+// =============================================================
+
+export class CalculatorModel {
+  static async create(input: CreateCalculatorInput): Promise<CalculatorRow> {
+    const q = `
+      INSERT INTO content.calculators
+        (product_id, type, name, description, config, status)
+      VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+      RETURNING id, product_id, type, name, description, config, status, created_at, updated_at
+    `;
+    const r = await db.query<CalculatorRow>(q, [
+      input.product_id,
+      input.type,
+      input.name,
+      input.description ?? null,
+      JSON.stringify(input.config),
+      input.status ?? "draft",
+    ]);
+    return r.rows[0]!;
+  }
+
+  static async findByProductId(productId: number): Promise<CalculatorRow[]> {
+    const q = `
+      SELECT id, product_id, type, name, description, config, status, created_at, updated_at
+      FROM content.calculators
+      WHERE product_id = $1
+      ORDER BY type ASC
+    `;
+    const r = await db.query<CalculatorRow>(q, [productId]);
+    return r.rows;
+  }
+
+  static async findById(id: number): Promise<CalculatorRow | null> {
+    const q = `
+      SELECT id, product_id, type, name, description, config, status, created_at, updated_at
+      FROM content.calculators
+      WHERE id = $1
+      LIMIT 1
+    `;
+    const r = await db.query<CalculatorRow>(q, [id]);
+    return r.rows[0] ?? null;
+  }
+
+  static async findByProductIdAndType(
+    productId: number,
+    type: string
+  ): Promise<CalculatorRow | null> {
+    const q = `
+      SELECT id, product_id, type, name, description, config, status, created_at, updated_at
+      FROM content.calculators
+      WHERE product_id = $1 AND type = $2
+      LIMIT 1
+    `;
+    const r = await db.query<CalculatorRow>(q, [productId, type]);
+    return r.rows[0] ?? null;
+  }
+
+  static async update(
+    id: number,
+    input: UpdateCalculatorInput
+  ): Promise<CalculatorRow | null> {
+    const sets: string[] = [];
+    const values: unknown[] = [];
+    let i = 1;
+
+    if (input.name !== undefined) { sets.push(`name = $${i++}`); values.push(input.name); }
+    if (input.description !== undefined) { sets.push(`description = $${i++}`); values.push(input.description); }
+    if (input.status !== undefined) { sets.push(`status = $${i++}`); values.push(input.status); }
+    if (input.config !== undefined) {
+      sets.push(`config = $${i++}::jsonb`);
+      values.push(JSON.stringify(input.config));
+    }
+
+    if (sets.length === 0) return CalculatorModel.findById(id);
+
+    values.push(id);
+    const q = `
+      UPDATE content.calculators
+      SET ${sets.join(", ")}
+      WHERE id = $${i}
+      RETURNING id, product_id, type, name, description, config, status, created_at, updated_at
+    `;
+    const r = await db.query<CalculatorRow>(q, values);
+    return r.rows[0] ?? null;
+  }
+
+  // Patch only the config JSONB — used by fields/formula/placements patch endpoints
+  static async patchConfig(
+    id: number,
+    configPatch: Record<string, unknown>
+  ): Promise<CalculatorRow | null> {
+    const q = `
+      UPDATE content.calculators
+      SET config = config || $1::jsonb
+      WHERE id = $2
+      RETURNING id, product_id, type, name, description, config, status, created_at, updated_at
+    `;
+    const r = await db.query<CalculatorRow>(q, [
+      JSON.stringify(configPatch),
+      id,
+    ]);
+    return r.rows[0] ?? null;
+  }
+
+  static async delete(id: number): Promise<boolean> {
+    const r = await db.query(
+      "DELETE FROM content.calculators WHERE id = $1",
+      [id]
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+}
+
+// =============================================================
+// CarbonFactorLibraryModel
+// =============================================================
+
+export class CarbonFactorLibraryModel {
+  static async create(
+    input: CreateCarbonFactorInput
+  ): Promise<CarbonFactorLibraryRow> {
+    const q = `
+      INSERT INTO content.carbon_factors_library
+        (name, category, value, unit, justification, source, confidence)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id, name, category, value::text, unit, justification, source,
+                confidence, is_active, created_at, updated_at
+    `;
+    const r = await db.query<CarbonFactorLibraryRow>(q, [
+      input.name,
+      input.category ?? null,
+      input.value,
+      input.unit,
+      input.justification ?? null,
+      input.source ?? null,
+      input.confidence ?? "low",
+    ]);
+    return r.rows[0]!;
+  }
+
+  static async findAll(params: {
+    category?: string;
     is_active?: boolean;
-    q?: string; // search in key/name
+    search?: string;
     limit: number;
     offset: number;
-  }): Promise<CarbonFactorRow[]> {
+  }): Promise<CarbonFactorLibraryRow[]> {
     const where: string[] = [];
     const values: unknown[] = [];
     let i = 1;
 
-    if (args.factor_type) {
-      where.push(`factor_type = $${i++}`);
-      values.push(args.factor_type);
+    if (params.category) {
+      where.push(`category = $${i++}`);
+      values.push(params.category);
     }
-    if (typeof args.is_active === "boolean") {
+    if (typeof params.is_active === "boolean") {
       where.push(`is_active = $${i++}`);
-      values.push(args.is_active);
+      values.push(params.is_active);
     }
-    if (args.q && args.q.trim()) {
-      where.push(`(factor_key ILIKE $${i} OR display_name ILIKE $${i})`);
-      values.push(`%${args.q.trim()}%`);
+    if (params.search?.trim()) {
+      where.push(`(name ILIKE $${i} OR category ILIKE $${i})`);
+      values.push(`%${params.search.trim()}%`);
       i++;
     }
 
     const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-
-    values.push(args.limit);
+    values.push(params.limit);
     const limitIdx = i++;
-    values.push(args.offset);
+    values.push(params.offset);
     const offsetIdx = i++;
 
     const q = `
-      SELECT id, factor_type, factor_key, display_name, unit, value, meta, is_active, updated_at
-      FROM public.carbon_factors
+      SELECT id, name, category, value::text, unit, justification, source,
+             confidence, is_active, created_at, updated_at
+      FROM content.carbon_factors_library
       ${whereSql}
-      ORDER BY factor_type ASC, factor_key ASC
-      LIMIT $${limitIdx}
-      OFFSET $${offsetIdx}
+      ORDER BY category ASC NULLS LAST, name ASC
+      LIMIT $${limitIdx} OFFSET $${offsetIdx}
     `;
-    const r = await db.query<CarbonFactorRow>(q, values);
+    const r = await db.query<CarbonFactorLibraryRow>(q, values);
     return r.rows;
   }
 
-  static async getByTypeAndKey(type: string, key: string): Promise<CarbonFactorRow | null> {
+  static async countAll(params: {
+    category?: string;
+    is_active?: boolean;
+    search?: string;
+  }): Promise<number> {
+    const where: string[] = [];
+    const values: unknown[] = [];
+    let i = 1;
+
+    if (params.category) { where.push(`category = $${i++}`); values.push(params.category); }
+    if (typeof params.is_active === "boolean") { where.push(`is_active = $${i++}`); values.push(params.is_active); }
+    if (params.search?.trim()) {
+      where.push(`(name ILIKE $${i} OR category ILIKE $${i})`);
+      values.push(`%${params.search.trim()}%`);
+      i++;
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    const r = await db.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM content.carbon_factors_library ${whereSql}`,
+      values
+    );
+    return parseInt(r.rows[0]!.count, 10);
+  }
+
+  static async findById(id: number): Promise<CarbonFactorLibraryRow | null> {
     const q = `
-      SELECT id, factor_type, factor_key, display_name, unit, value, meta, is_active, updated_at
-      FROM public.carbon_factors
-      WHERE factor_type = $1 AND factor_key = $2
+      SELECT id, name, category, value::text, unit, justification, source,
+             confidence, is_active, created_at, updated_at
+      FROM content.carbon_factors_library
+      WHERE id = $1
       LIMIT 1
     `;
-    const r = await db.query<CarbonFactorRow>(q, [type, key]);
+    const r = await db.query<CarbonFactorLibraryRow>(q, [id]);
     return r.rows[0] ?? null;
   }
 
-  static async getActiveByTypeAndKeys(
-    requests: Array<{ factor_type: string; factor_key: string }>,
-  ): Promise<CarbonFactorRow[]> {
-    if (requests.length === 0) return [];
-
-    // Build VALUES list: (type, key), (type, key) ...
+  static async update(
+    id: number,
+    input: UpdateCarbonFactorInput
+  ): Promise<CarbonFactorLibraryRow | null> {
+    const sets: string[] = [];
     const values: unknown[] = [];
-    const tuples: string[] = [];
     let i = 1;
 
-    for (const req of requests) {
-      tuples.push(`($${i++}, $${i++})`);
-      values.push(req.factor_type, req.factor_key);
-    }
+    if (input.name !== undefined) { sets.push(`name = $${i++}`); values.push(input.name); }
+    if (input.category !== undefined) { sets.push(`category = $${i++}`); values.push(input.category); }
+    if (input.value !== undefined) { sets.push(`value = $${i++}`); values.push(input.value); }
+    if (input.unit !== undefined) { sets.push(`unit = $${i++}`); values.push(input.unit); }
+    if (input.justification !== undefined) { sets.push(`justification = $${i++}`); values.push(input.justification); }
+    if (input.source !== undefined) { sets.push(`source = $${i++}`); values.push(input.source); }
+    if (input.confidence !== undefined) { sets.push(`confidence = $${i++}`); values.push(input.confidence); }
+    if (input.is_active !== undefined) { sets.push(`is_active = $${i++}`); values.push(input.is_active); }
 
+    if (sets.length === 0) return CarbonFactorLibraryModel.findById(id);
+
+    values.push(id);
     const q = `
-      WITH req(factor_type, factor_key) AS (
-        VALUES ${tuples.join(",")}
-      )
-      SELECT f.id, f.factor_type, f.factor_key, f.display_name, f.unit, f.value, f.meta, f.is_active, f.updated_at
-      FROM req
-      JOIN public.carbon_factors f
-        ON f.factor_type = req.factor_type
-       AND f.factor_key  = req.factor_key
-      WHERE f.is_active = true
+      UPDATE content.carbon_factors_library
+      SET ${sets.join(", ")}
+      WHERE id = $${i}
+      RETURNING id, name, category, value::text, unit, justification, source,
+                confidence, is_active, created_at, updated_at
     `;
-    const r = await db.query<CarbonFactorRow>(q, values);
-    return r.rows;
+    const r = await db.query<CarbonFactorLibraryRow>(q, values);
+    return r.rows[0] ?? null;
   }
 
-  static async upsert(args: {
-    factor_type: string;
-    factor_key: string;
-    display_name: string;
-    unit: FactorUnit;
-    value: number | null;
-    meta: unknown;
-    is_active: boolean;
-    // admin tracking (stored into meta)
-    updated_by?: string;
-    change_note?: string;
-  }): Promise<CarbonFactorRow> {
-    const meta = CarbonFactorModel.mergeAdminMeta(args.meta, args.updated_by, args.change_note);
-
-    const q = `
-      INSERT INTO public.carbon_factors (factor_type, factor_key, display_name, unit, value, meta, is_active, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, now())
-      ON CONFLICT (factor_type, factor_key)
-      DO UPDATE SET
-        display_name = EXCLUDED.display_name,
-        unit         = EXCLUDED.unit,
-        value        = EXCLUDED.value,
-        meta         = EXCLUDED.meta,
-        is_active    = EXCLUDED.is_active,
-        updated_at   = now()
-      RETURNING id, factor_type, factor_key, display_name, unit, value, meta, is_active, updated_at
-    `;
-
-    const values = [
-      args.factor_type,
-      args.factor_key,
-      args.display_name,
-      args.unit,
-      args.value,
-      JSON.stringify(meta),
-      args.is_active,
-    ];
-
-    const r = await db.query<CarbonFactorRow>(q, values);
-    return r.rows[0]!;
+  static async delete(id: number): Promise<boolean> {
+    const r = await db.query(
+      "DELETE FROM content.carbon_factors_library WHERE id = $1",
+      [id]
+    );
+    return (r.rowCount ?? 0) > 0;
   }
-
-  private static mergeAdminMeta(meta: unknown, updatedBy?: string, changeNote?: string): unknown {
-    const base = isPlainObject(meta) ? meta : {};
-    const adminMeta: Record<string, unknown> = { ...base };
-
-    if (updatedBy && updatedBy.trim()) adminMeta.last_updated_by = updatedBy.trim();
-    if (changeNote && changeNote.trim()) adminMeta.last_change_note = changeNote.trim();
-    if (updatedBy || changeNote) adminMeta.last_change_at = new Date().toISOString();
-
-    return adminMeta;
-  }
-}
-
-export class CarbonCalculationModel {
-  static async create(args: {
-    craft_id: string;
-    mode: CalculatorMode;
-    inputs: unknown;
-    result: unknown;
-  }): Promise<CarbonCalculationRow> {
-    const q = `
-      INSERT INTO public.carbon_calculations (craft_id, mode, inputs, result, created_at)
-      VALUES ($1, $2, $3::jsonb, $4::jsonb, now())
-      RETURNING id, craft_id, mode, inputs, result, created_at
-    `;
-    const values = [args.craft_id, args.mode, JSON.stringify(args.inputs), JSON.stringify(args.result)];
-    const r = await db.query<CarbonCalculationRow>(q, values);
-    return r.rows[0]!;
-  }
-
-  static async listByCraftId(args: {
-    craft_id: string;
-    limit: number;
-    offset: number;
-  }): Promise<CarbonCalculationRow[]> {
-    const q = `
-      SELECT id, craft_id, mode, inputs, result, created_at
-      FROM public.carbon_calculations
-      WHERE craft_id = $1
-      ORDER BY created_at DESC
-      LIMIT $2
-      OFFSET $3
-    `;
-    const r = await db.query<CarbonCalculationRow>(q, [args.craft_id, args.limit, args.offset]);
-    return r.rows;
-  }
-}
-
-/** ---------------- Helpers ---------------- */
-
-function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
