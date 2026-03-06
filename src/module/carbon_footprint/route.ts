@@ -6,6 +6,7 @@ import {
   CalculatorController,
   CarbonFactorLibraryController,
   PublicCalculatorController,
+  productImageMiddleware,
 } from "./controller.ts";
 
 const router = Router();
@@ -41,10 +42,10 @@ router.delete("/admin/subcategories/:id", SubcategoryController.remove);
 // =============================================================
 // ADMIN — Products
 // =============================================================
-router.post("/admin/products", ProductController.create);
+router.post("/admin/products", productImageMiddleware, ProductController.create);
 router.get("/admin/products/by-subcategory/:subcategoryId", ProductController.listBySubcategoryId);
 router.get("/admin/products/detail/:id", ProductController.getById);
-router.put("/admin/products/:id", ProductController.update);
+router.put("/admin/products/:id", productImageMiddleware, ProductController.update);
 router.delete("/admin/products/:id", ProductController.remove);
 
 // =============================================================

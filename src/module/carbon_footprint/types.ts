@@ -93,8 +93,6 @@ export interface CategoryRow {
   id: number;
   name: string;
   slug: string;
-  display_order: number;
-  icon: string | null;
   status: Status;
   created_at: string;
   updated_at: string;
@@ -105,7 +103,6 @@ export interface SubcategoryRow {
   category_id: number;
   name: string;
   slug: string;
-  display_order: number;
   status: Status;
   created_at: string;
   updated_at: string;
@@ -119,7 +116,6 @@ export interface ProductRow {
   description: string | null;
   image_url: string | null;
   ecommerce_url: string | null;
-  display_order: number;
   status: Status;
   created_at: string;
   updated_at: string;
@@ -160,16 +156,12 @@ export interface CarbonFactorLibraryRow {
 export interface CreateCategoryInput {
   name: string;
   slug: string;
-  display_order?: number;
-  icon?: string;
   status?: Status;
 }
 
 export interface UpdateCategoryInput {
   name?: string;
   slug?: string;
-  display_order?: number;
-  icon?: string;
   status?: Status;
 }
 
@@ -179,14 +171,12 @@ export interface CreateSubcategoryInput {
   category_id: number;
   name: string;
   slug: string;
-  display_order?: number;
   status?: Status;
 }
 
 export interface UpdateSubcategoryInput {
   name?: string;
   slug?: string;
-  display_order?: number;
   status?: Status;
 }
 
@@ -199,7 +189,6 @@ export interface CreateProductInput {
   description?: string;
   image_url?: string;
   ecommerce_url?: string;
-  display_order?: number;
   status?: Status;
 }
 
@@ -209,7 +198,6 @@ export interface UpdateProductInput {
   description?: string;
   image_url?: string;
   ecommerce_url?: string;
-  display_order?: number;
   status?: Status;
 }
 

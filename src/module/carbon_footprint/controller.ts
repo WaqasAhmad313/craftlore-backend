@@ -1,4 +1,6 @@
 import type { Request, Response } from "express";
+import multer from "multer";
+import { uploadProductImage } from "./uploader.ts";
 import {
   CategoryService,
   SubcategoryService,
@@ -27,6 +29,7 @@ import {
   sendServerError,
   generateSlug,
 } from "./helpers.ts";
+import type { MulterFile } from "../report/types/types.ts";
 import type {
   CreateCategoryInput,
   UpdateCategoryInput,
@@ -76,8 +79,6 @@ export class CategoryController {
       const input: CreateCategoryInput = {
         name,
         slug: getOptionalString(body, "slug") ?? generateSlug(name),
-        display_order: getOptionalNumber(body, "display_order") ?? 0,
-        icon: getOptionalString(body, "icon"),
         status: parseStatus(body["status"], "active"),
       };
 
@@ -124,8 +125,6 @@ export class CategoryController {
       const input: UpdateCategoryInput = {
         name: getOptionalString(body, "name"),
         slug: getOptionalString(body, "slug"),
-        display_order: getOptionalNumber(body, "display_order"),
-        icon: getOptionalString(body, "icon"),
         status: parseStatus(body["status"], "active") !== "active"
           ? parseStatus(body["status"], "active")
           : body["status"] !== undefined
@@ -173,7 +172,6 @@ export class SubcategoryController {
         category_id,
         name,
         slug: getOptionalString(body, "slug") ?? generateSlug(name),
-        display_order: getOptionalNumber(body, "display_order") ?? 0,
         status: parseStatus(body["status"], "active"),
       };
 
@@ -223,7 +221,6 @@ export class SubcategoryController {
       const input: UpdateSubcategoryInput = {
         name: getOptionalString(body, "name"),
         slug: getOptionalString(body, "slug"),
-        display_order: getOptionalNumber(body, "display_order"),
         status: body["status"] !== undefined
           ? parseStatus(body["status"], "draft")
           : undefined,
@@ -250,12 +247,27 @@ export class SubcategoryController {
   }
 }
 
+// Multer instance for product image uploads — memory storage, images only, 10MB max
+const productImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files are allowed"));
+    }
+  },
+});
+
+export const productImageMiddleware = productImageUpload.single("image");
+
 // =============================================================
 // ProductController
 // =============================================================
 
 export class ProductController {
-  /** POST /api/admin/products */
+  /** POST /api/admin/products  — accepts multipart/form-data or JSON */
   static async create(req: Request, res: Response): Promise<Response> {
     try {
       const body = asObject(req.body);
@@ -265,14 +277,20 @@ export class ProductController {
       if (!name) return sendBadRequest(res, "name is required");
       if (!subcategory_id) return sendBadRequest(res, "subcategory_id is required");
 
+      // Upload image if file was attached
+      const file = (req as unknown as { file?: MulterFile }).file;
+      let image_url = getOptionalString(body, "image_url");
+      if (file) {
+        image_url = await uploadProductImage(file);
+      }
+
       const input: CreateProductInput = {
         subcategory_id,
         name,
         slug: getOptionalString(body, "slug") ?? generateSlug(name),
         description: getOptionalString(body, "description"),
-        image_url: getOptionalString(body, "image_url"),
+        image_url,
         ecommerce_url: getOptionalString(body, "ecommerce_url"),
-        display_order: getOptionalNumber(body, "display_order") ?? 0,
         status: parseStatus(body["status"], "active"),
       };
 
@@ -312,20 +330,27 @@ export class ProductController {
     }
   }
 
-  /** PUT /api/admin/products/:id */
+  /** PUT /api/admin/products/:id  — accepts multipart/form-data or JSON */
   static async update(req: Request, res: Response): Promise<Response> {
     try {
       const id = parseParamId(req.params["id"]);
       if (!id) return sendBadRequest(res, "id must be a positive integer");
 
       const body = asObject(req.body);
+
+      // Upload image if a new file was attached
+      const file = (req as unknown as { file?: MulterFile }).file;
+      let image_url = getOptionalString(body, "image_url");
+      if (file) {
+        image_url = await uploadProductImage(file);
+      }
+
       const input: UpdateProductInput = {
         name: getOptionalString(body, "name"),
         slug: getOptionalString(body, "slug"),
         description: getOptionalString(body, "description"),
-        image_url: getOptionalString(body, "image_url"),
+        image_url,
         ecommerce_url: getOptionalString(body, "ecommerce_url"),
-        display_order: getOptionalNumber(body, "display_order"),
         status: body["status"] !== undefined
           ? parseStatus(body["status"], "draft")
           : undefined,

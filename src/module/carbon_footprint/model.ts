@@ -26,15 +26,13 @@ export class CategoryModel {
   static async create(input: CreateCategoryInput): Promise<CategoryRow> {
     const q = `
       INSERT INTO content.categories
-        (name, slug, display_order, icon, status)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, name, slug, display_order, icon, status, created_at, updated_at
+        (name, slug, status)
+      VALUES ($1, $2, $3)
+      RETURNING id, name, slug, status, created_at, updated_at
     `;
     const r = await db.query<CategoryRow>(q, [
       input.name,
       input.slug,
-      input.display_order ?? 0,
-      input.icon ?? null,
       input.status ?? "active",
     ]);
     return r.rows[0]!;
@@ -42,9 +40,9 @@ export class CategoryModel {
 
   static async findAll(params: PaginationParams): Promise<CategoryRow[]> {
     const q = `
-      SELECT id, name, slug, display_order, icon, status, created_at, updated_at
+      SELECT id, name, slug, status, created_at, updated_at
       FROM content.categories
-      ORDER BY display_order ASC, name ASC
+      ORDER BY name ASC
       LIMIT $1 OFFSET $2
     `;
     const r = await db.query<CategoryRow>(q, [params.limit, params.offset]);
@@ -60,7 +58,7 @@ export class CategoryModel {
 
   static async findById(id: number): Promise<CategoryRow | null> {
     const q = `
-      SELECT id, name, slug, display_order, icon, status, created_at, updated_at
+      SELECT id, name, slug, status, created_at, updated_at
       FROM content.categories
       WHERE id = $1
       LIMIT 1
@@ -71,7 +69,7 @@ export class CategoryModel {
 
   static async findBySlug(slug: string): Promise<CategoryRow | null> {
     const q = `
-      SELECT id, name, slug, display_order, icon, status, created_at, updated_at
+      SELECT id, name, slug, status, created_at, updated_at
       FROM content.categories
       WHERE slug = $1
       LIMIT 1
@@ -96,14 +94,6 @@ export class CategoryModel {
       sets.push(`slug = $${i++}`);
       values.push(input.slug);
     }
-    if (input.display_order !== undefined) {
-      sets.push(`display_order = $${i++}`);
-      values.push(input.display_order);
-    }
-    if (input.icon !== undefined) {
-      sets.push(`icon = $${i++}`);
-      values.push(input.icon);
-    }
     if (input.status !== undefined) {
       sets.push(`status = $${i++}`);
       values.push(input.status);
@@ -116,7 +106,7 @@ export class CategoryModel {
       UPDATE content.categories
       SET ${sets.join(", ")}
       WHERE id = $${i}
-      RETURNING id, name, slug, display_order, icon, status, created_at, updated_at
+      RETURNING id, name, slug, status, created_at, updated_at
     `;
     const r = await db.query<CategoryRow>(q, values);
     return r.rows[0] ?? null;
@@ -141,15 +131,14 @@ export class SubcategoryModel {
   ): Promise<SubcategoryRow> {
     const q = `
       INSERT INTO content.subcategories
-        (category_id, name, slug, display_order, status)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, category_id, name, slug, display_order, status, created_at, updated_at
+        (category_id, name, slug, status)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, category_id, name, slug, status, created_at, updated_at
     `;
     const r = await db.query<SubcategoryRow>(q, [
       input.category_id,
       input.name,
       input.slug,
-      input.display_order ?? 0,
       input.status ?? "active",
     ]);
     return r.rows[0]!;
@@ -160,10 +149,10 @@ export class SubcategoryModel {
     params: PaginationParams
   ): Promise<SubcategoryRow[]> {
     const q = `
-      SELECT id, category_id, name, slug, display_order, status, created_at, updated_at
+      SELECT id, category_id, name, slug, status, created_at, updated_at
       FROM content.subcategories
       WHERE category_id = $1
-      ORDER BY display_order ASC, name ASC
+      ORDER BY name ASC
       LIMIT $2 OFFSET $3
     `;
     const r = await db.query<SubcategoryRow>(q, [
@@ -184,7 +173,7 @@ export class SubcategoryModel {
 
   static async findById(id: number): Promise<SubcategoryRow | null> {
     const q = `
-      SELECT id, category_id, name, slug, display_order, status, created_at, updated_at
+      SELECT id, category_id, name, slug, status, created_at, updated_at
       FROM content.subcategories
       WHERE id = $1
       LIMIT 1
@@ -195,7 +184,7 @@ export class SubcategoryModel {
 
   static async findBySlug(slug: string): Promise<SubcategoryRow | null> {
     const q = `
-      SELECT id, category_id, name, slug, display_order, status, created_at, updated_at
+      SELECT id, category_id, name, slug, status, created_at, updated_at
       FROM content.subcategories
       WHERE slug = $1
       LIMIT 1
@@ -214,7 +203,6 @@ export class SubcategoryModel {
 
     if (input.name !== undefined) { sets.push(`name = $${i++}`); values.push(input.name); }
     if (input.slug !== undefined) { sets.push(`slug = $${i++}`); values.push(input.slug); }
-    if (input.display_order !== undefined) { sets.push(`display_order = $${i++}`); values.push(input.display_order); }
     if (input.status !== undefined) { sets.push(`status = $${i++}`); values.push(input.status); }
 
     if (sets.length === 0) return SubcategoryModel.findById(id);
@@ -224,7 +212,7 @@ export class SubcategoryModel {
       UPDATE content.subcategories
       SET ${sets.join(", ")}
       WHERE id = $${i}
-      RETURNING id, category_id, name, slug, display_order, status, created_at, updated_at
+      RETURNING id, category_id, name, slug, status, created_at, updated_at
     `;
     const r = await db.query<SubcategoryRow>(q, values);
     return r.rows[0] ?? null;
@@ -247,10 +235,10 @@ export class ProductModel {
   static async create(input: CreateProductInput): Promise<ProductRow> {
     const q = `
       INSERT INTO content.products
-        (subcategory_id, name, slug, description, image_url, ecommerce_url, display_order, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        (subcategory_id, name, slug, description, image_url, ecommerce_url, status)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING id, subcategory_id, name, slug, description, image_url, ecommerce_url,
-                display_order, status, created_at, updated_at
+                status, created_at, updated_at
     `;
     const r = await db.query<ProductRow>(q, [
       input.subcategory_id,
@@ -259,7 +247,6 @@ export class ProductModel {
       input.description ?? null,
       input.image_url ?? null,
       input.ecommerce_url ?? null,
-      input.display_order ?? 0,
       input.status ?? "active",
     ]);
     return r.rows[0]!;
@@ -271,10 +258,10 @@ export class ProductModel {
   ): Promise<ProductRow[]> {
     const q = `
       SELECT id, subcategory_id, name, slug, description, image_url, ecommerce_url,
-             display_order, status, created_at, updated_at
+             status, created_at, updated_at
       FROM content.products
       WHERE subcategory_id = $1
-      ORDER BY display_order ASC, name ASC
+      ORDER BY name ASC
       LIMIT $2 OFFSET $3
     `;
     const r = await db.query<ProductRow>(q, [
@@ -296,7 +283,7 @@ export class ProductModel {
   static async findById(id: number): Promise<ProductRow | null> {
     const q = `
       SELECT id, subcategory_id, name, slug, description, image_url, ecommerce_url,
-             display_order, status, created_at, updated_at
+             status, created_at, updated_at
       FROM content.products
       WHERE id = $1
       LIMIT 1
@@ -308,7 +295,7 @@ export class ProductModel {
   static async findBySlug(slug: string): Promise<ProductRow | null> {
     const q = `
       SELECT id, subcategory_id, name, slug, description, image_url, ecommerce_url,
-             display_order, status, created_at, updated_at
+             status, created_at, updated_at
       FROM content.products
       WHERE slug = $1
       LIMIT 1
@@ -330,7 +317,6 @@ export class ProductModel {
     if (input.description !== undefined) { sets.push(`description = $${i++}`); values.push(input.description); }
     if (input.image_url !== undefined) { sets.push(`image_url = $${i++}`); values.push(input.image_url); }
     if (input.ecommerce_url !== undefined) { sets.push(`ecommerce_url = $${i++}`); values.push(input.ecommerce_url); }
-    if (input.display_order !== undefined) { sets.push(`display_order = $${i++}`); values.push(input.display_order); }
     if (input.status !== undefined) { sets.push(`status = $${i++}`); values.push(input.status); }
 
     if (sets.length === 0) return ProductModel.findById(id);
@@ -341,7 +327,7 @@ export class ProductModel {
       SET ${sets.join(", ")}
       WHERE id = $${i}
       RETURNING id, subcategory_id, name, slug, description, image_url, ecommerce_url,
-                display_order, status, created_at, updated_at
+                status, created_at, updated_at
     `;
     const r = await db.query<ProductRow>(q, values);
     return r.rows[0] ?? null;
