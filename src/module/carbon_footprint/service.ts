@@ -1,28 +1,17 @@
-// =============================================================
-// service.ts — Calculator Module
-// All business logic. Calls models. Never touches req/res.
-// =============================================================
-
 import {
   CategoryModel,
   SubcategoryModel,
   ProductModel,
   CalculatorModel,
-  CarbonFactorLibraryModel,
 } from "./model.ts";
 import { validateCalculatorConfig, generateSlug, round4, pgNumericToNumber } from "./helpers.ts";
 import type {
   CalculatorConfig,
   CalculatorRow,
   CalculatorType,
-  CarbonCalculationResult,
-  CarbonFactorLibraryRow,
   CategoryRow,
-  BreakdownItem,
   CalculationResult,
   CalculatorConfigResponse,
-  ConfidenceLevel,
-  CreateCarbonFactorInput,
   CreateCalculatorInput,
   CreateCategoryInput,
   CreateProductInput,
@@ -30,12 +19,9 @@ import type {
   FieldOption,
   PaginatedResult,
   PaginationParams,
-  Placement,
-  PlacementResult,
   ProductRow,
   ScoreCalculationResult,
   SubcategoryRow,
-  UpdateCarbonFactorInput,
   UpdateCalculatorInput,
   UpdateCategoryInput,
   UpdateProductInput,
@@ -311,105 +297,9 @@ export class CalculatorService {
     return updated;
   }
 
-  // Patch only the formula inside config
-  static async patchFormula(
-    id: number,
-    formula: unknown
-  ): Promise<CalculatorRow> {
-    const calc = await CalculatorService.getById(id);
-    if (calc.type !== "carbon") {
-      throw new Error("Formula config only applies to carbon calculators");
-    }
-
-    const existingConfig = parseConfig(calc.config);
-    const validation = validateCalculatorConfig({ ...existingConfig, formula });
-    if (!validation.valid) {
-      throw new ValidationError("Invalid formula config", validation.errors);
-    }
-
-    const updated = await CalculatorModel.patchConfig(id, {
-      formula: validation.config!.formula,
-    });
-    if (!updated) throw new NotFoundError(`Calculator ${id} not found`);
-    return updated;
-  }
-
-  // Patch only the placements array inside config
-  static async patchPlacements(
-    id: number,
-    placements: unknown
-  ): Promise<CalculatorRow> {
-    const calc = await CalculatorService.getById(id);
-    if (calc.type !== "carbon") {
-      throw new Error("Placements only apply to carbon calculators");
-    }
-
-    const existingConfig = parseConfig(calc.config);
-    const validation = validateCalculatorConfig({
-      ...existingConfig,
-      placements,
-    });
-    if (!validation.valid) {
-      throw new ValidationError("Invalid placements config", validation.errors);
-    }
-
-    const updated = await CalculatorModel.patchConfig(id, {
-      placements: validation.config!.placements,
-    });
-    if (!updated) throw new NotFoundError(`Calculator ${id} not found`);
-    return updated;
-  }
-
   static async delete(id: number): Promise<void> {
     await CalculatorService.getById(id);
     await CalculatorModel.delete(id);
-  }
-}
-
-// =============================================================
-// CarbonFactorLibraryService
-// =============================================================
-
-export class CarbonFactorLibraryService {
-  static async create(
-    input: CreateCarbonFactorInput
-  ): Promise<CarbonFactorLibraryRow> {
-    return CarbonFactorLibraryModel.create(input);
-  }
-
-  static async list(params: {
-    category?: string;
-    is_active?: boolean;
-    search?: string;
-    limit: number;
-    offset: number;
-  }): Promise<PaginatedResult<CarbonFactorLibraryRow>> {
-    const [data, total] = await Promise.all([
-      CarbonFactorLibraryModel.findAll(params),
-      CarbonFactorLibraryModel.countAll(params),
-    ]);
-    return { data, total, limit: params.limit, offset: params.offset };
-  }
-
-  static async getById(id: number): Promise<CarbonFactorLibraryRow> {
-    const row = await CarbonFactorLibraryModel.findById(id);
-    if (!row) throw new NotFoundError(`Carbon factor ${id} not found`);
-    return row;
-  }
-
-  static async update(
-    id: number,
-    input: UpdateCarbonFactorInput
-  ): Promise<CarbonFactorLibraryRow> {
-    await CarbonFactorLibraryService.getById(id);
-    const updated = await CarbonFactorLibraryModel.update(id, input);
-    if (!updated) throw new NotFoundError(`Carbon factor ${id} not found`);
-    return updated;
-  }
-
-  static async delete(id: number): Promise<void> {
-    await CarbonFactorLibraryService.getById(id);
-    await CarbonFactorLibraryModel.delete(id);
   }
 }
 
@@ -427,9 +317,9 @@ export class UserCalculatorService {
     if (!product) throw new NotFoundError(`Product ${productId} not found`);
 
     const calc = await CalculatorModel.findByProductIdAndType(productId, type);
-    if (!calc || calc.status !== "active") {
+    if (!calc) {
       throw new NotFoundError(
-        `No active ${type} calculator found for product ${productId}`
+        `No ${type} calculator found for product ${productId}`
       );
     }
 
@@ -440,8 +330,8 @@ export class UserCalculatorService {
       type: calc.type,
       name: calc.name,
       description: calc.description,
+      status: calc.status,
       fields: config.fields,
-      formula: config.formula ?? null,
       rating_thresholds: config.rating_thresholds ?? null,
     };
   }
@@ -453,119 +343,19 @@ export class UserCalculatorService {
       input.calculator_type
     );
 
-    if (!calc || calc.status !== "active") {
+    if (!calc) {
       throw new NotFoundError(
-        `No active ${input.calculator_type} calculator found for product ${input.product_id}`
+        `No ${input.calculator_type} calculator found for product ${input.product_id}`
       );
     }
     const config = parseConfig(calc.config);
-
-    if (input.calculator_type === "carbon") {
-      return runCarbonCalculation(config, input.inputs);
-    } else {
-      return runScoreCalculation(config, input.inputs);
-    }
+    return runScoreCalculation(config, input.inputs);
   }
 }
 
 // =============================================================
-// Calculation engines
+// Calculation engine — score-based (material / chemical / durability)
 // =============================================================
-
-function runCarbonCalculation(
-  config: CalculatorConfig,
-  inputs: Record<string, unknown>
-): CarbonCalculationResult {
-  const warnings: string[] = [];
-  const breakdown: BreakdownItem[] = [];
-  const modifiers: CarbonCalculationResult["modifiers"] = [];
-
-  if (!config.formula) {
-    throw new Error("This calculator has no formula configured");
-  }
-
-  const formula = config.formula;
-
-  // Build field lookup map for quick access
-  const fieldMap = new Map(config.fields.map((f) => [f.key, f]));
-
-  // Resolve weight
-  const weightKg = resolveWeight(inputs, formula.weight_field, warnings);
-
-  let subtotal = 0;
-
-  // --- Base field ---
-  const baseField = fieldMap.get(formula.base_field);
-  if (baseField) {
-    const result = applyFieldValue(baseField, inputs, weightKg, warnings);
-    if (result) {
-      breakdown.push(result);
-      subtotal += result.co2_value;
-    }
-  } else {
-    warnings.push(`Base field "${formula.base_field}" not found in config`);
-  }
-
-  // --- Additives ---
-  for (const key of formula.additives) {
-    const field = fieldMap.get(key);
-    if (!field) {
-      warnings.push(`Additive field "${key}" not found in config`);
-      continue;
-    }
-    const result = applyFieldValue(field, inputs, weightKg, warnings);
-    if (result) {
-      breakdown.push(result);
-      subtotal += result.co2_value;
-    }
-  }
-
-  // --- Percent modifiers ---
-  let percentSum = 0;
-
-  for (const key of formula.percent_modifiers) {
-    const field = fieldMap.get(key);
-    if (!field) {
-      warnings.push(`Modifier field "${key}" not found in config`);
-      continue;
-    }
-
-    const selected = resolveSelectedOptions(field, inputs);
-    for (const opt of selected) {
-      percentSum += opt.value;
-      modifiers.push({
-        field_key: field.key,
-        field_label: field.label,
-        selected_option: opt.label,
-        percent: opt.value,
-      });
-    }
-  }
-
-  const total = round4(subtotal * (1 + percentSum / 100));
-
-  // --- Reduction tips: flag fields contributing > 30% of subtotal ---
-  for (const item of breakdown) {
-    if (subtotal > 0 && item.co2_value / subtotal > 0.3) {
-      item.reduction_tip = buildReductionTip(item.field_key, item.selected_option, config);
-    }
-  }
-
-  // --- Placement ---
-  const placement = resolvePlacement(config.placements ?? [], total);
-
-  // --- Confidence ---
-  const confidence = inferConfidence(breakdown.length, warnings.length);
-
-  return {
-    total_kg_co2e: total,
-    breakdown,
-    modifiers,
-    placement,
-    confidence,
-    warnings,
-  };
-}
 
 function runScoreCalculation(
   config: CalculatorConfig,
@@ -580,10 +370,11 @@ function runScoreCalculation(
     const selected = resolveSelectedOptions(field, inputs);
     for (const opt of selected) {
       breakdown.push({
-        field_key: field.key,
-        field_label: field.label,
+        field_key:       field.key,
+        field_label:     field.label,
         selected_option: opt.label,
-        score: opt.value,
+        score:           opt.value,
+        justification:   opt.justification ?? "",
       });
       totalScore += opt.value;
     }
@@ -599,30 +390,6 @@ function runScoreCalculation(
     color: match?.color ?? "gray",
     breakdown,
   };
-}
-
-// =============================================================
-// Calculation helpers
-// =============================================================
-
-function resolveWeight(
-  inputs: Record<string, unknown>,
-  weightField: string | undefined,
-  warnings: string[]
-): number | null {
-  if (!weightField) return null;
-
-  const raw = inputs[weightField];
-  if (typeof raw === "number" && raw > 0) return raw;
-  if (typeof raw === "string") {
-    const n = Number(raw);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-
-  warnings.push(
-    `Weight field "${weightField}" missing or invalid — weight-based calculation skipped`
-  );
-  return null;
 }
 
 function resolveSelectedOptions(
@@ -649,98 +416,6 @@ function resolveSelectedOptions(
   }
 
   return [];
-}
-
-function applyFieldValue(
-  field: { key: string; label: string; type: string; role: string; options: FieldOption[] },
-  inputs: Record<string, unknown>,
-  weightKg: number | null,
-  warnings: string[]
-): BreakdownItem | null {
-  const selected = resolveSelectedOptions(field, inputs);
-
-  if (selected.length === 0) {
-    warnings.push(`No selection found for field "${field.key}"`);
-    return null;
-  }
-
-  const opt = selected[0]!;
-  let co2Value = opt.value;
-
-  // If unit contains "per_kg", multiply by weight
-  if (opt.unit.includes("per_kg")) {
-    if (weightKg === null) {
-      warnings.push(
-        `Field "${field.key}" requires weight but none provided — using raw value`
-      );
-    } else {
-      co2Value = round4(opt.value * weightKg);
-    }
-  }
-
-  return {
-    field_key: field.key,
-    field_label: field.label,
-    selected_option: opt.label,
-    co2_value: co2Value,
-    unit: opt.unit,
-    role: field.role as BreakdownItem["role"],
-    justification: opt.justification,
-  };
-}
-
-function buildReductionTip(
-  fieldKey: string,
-  selectedOption: string,
-  config: CalculatorConfig
-): string {
-  const field = config.fields.find((f) => f.key === fieldKey);
-  if (!field) return "";
-
-  // Find the option with lowest co2 value in the same field
-  const sorted = [...field.options].sort((a, b) => a.value - b.value);
-  const lowest = sorted[0];
-
-  if (!lowest || lowest.label === selectedOption) return "";
-
-  return `Switching to "${lowest.label}" could significantly reduce this component's footprint`;
-}
-
-function resolvePlacement(
-  placements: Placement[],
-  totalCo2: number
-): PlacementResult | null {
-  const sorted = [...placements].sort(
-    (a, b) => a.display_order - b.display_order
-  );
-
-  for (const p of sorted) {
-    const c = p.condition;
-
-    if (c.always) return toPlacementResult(p);
-    if (c.co2_above !== undefined && totalCo2 > c.co2_above) return toPlacementResult(p);
-    if (c.co2_below !== undefined && totalCo2 < c.co2_below) return toPlacementResult(p);
-  }
-
-  return null;
-}
-
-function toPlacementResult(p: Placement): PlacementResult {
-  return {
-    headline: p.headline,
-    body: p.body,
-    cta_label: p.cta_label,
-    cta_url: p.cta_url,
-  };
-}
-
-function inferConfidence(
-  breakdownCount: number,
-  warningsCount: number
-): ConfidenceLevel {
-  if (warningsCount > 2 || breakdownCount === 0) return "low";
-  if (warningsCount > 0) return "medium";
-  return "high";
 }
 
 // =============================================================

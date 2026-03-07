@@ -4,7 +4,7 @@
 
 export type Status = "active" | "draft" | "archived";
 
-export type CalculatorType = "carbon" | "material" | "chemical" | "durability";
+export type CalculatorType = "material" | "chemical" | "durability";
 
 export type FieldType =
   | "dropdown"
@@ -15,10 +15,10 @@ export type FieldType =
   | "text";
 
 export type FieldRole =
-  | "base"        // multiplied by weight → main CO2 component
-  | "additive"    // flat value added to subtotal
-  | "percent_modifier"  // percent applied on subtotal (negative = reduction)
-  | "informational";    // shown to user, ignored in formula
+  | "base"              // base score value
+  | "additive"          // flat score added to total
+  | "percent_modifier"  // percent applied on total (negative = reduction)
+  | "informational";    // shown to user, ignored in scoring
 
 export type ConfidenceLevel = "low" | "medium" | "high";
 
@@ -28,9 +28,9 @@ export type ConfidenceLevel = "low" | "medium" | "high";
 
 export interface FieldOption {
   label: string;
-  value: number;           // CO2 value or score value
-  unit: string;            // kg_co2_per_kg | kg_co2_per_item | percent | score etc.
-  justification: string;   // why this value — shown in Defender section
+  value: number;           // score value
+  unit: string;            // pts | percent | score etc.
+  justification: string;   // why this value — shown in result breakdown
   source?: string;         // study, reference, or note
   display_order: number;
 }
@@ -47,30 +47,6 @@ export interface CalculatorField {
   options: FieldOption[];  // empty array for number/dimension/text fields
 }
 
-export interface FormulaConfig {
-  base_field: string;      // field key whose value is the base factor
-  weight_field?: string;   // field key that provides weight (for weight_based calc)
-  additives: string[];     // field keys added flat to subtotal
-  percent_modifiers: string[]; // field keys applied as percent on subtotal
-}
-
-export interface PlacementCondition {
-  always?: true;
-  co2_above?: number;
-  co2_below?: number;
-  score_above?: number;
-  score_below?: number;
-}
-
-export interface Placement {
-  condition: PlacementCondition;
-  headline: string;        // emotional hook
-  body: string;            // the guilt/pride narrative
-  cta_label: string;       // button text
-  cta_url: string;         // ecommerce link
-  display_order: number;
-}
-
 export interface RatingThreshold {
   max_score: number;       // score below or equal to this gets this label
   label: string;           // e.g. "Highly Sustainable"
@@ -80,9 +56,7 @@ export interface RatingThreshold {
 // The full JSONB config stored in calculators.config
 export interface CalculatorConfig {
   fields: CalculatorField[];
-  formula?: FormulaConfig;           // only for carbon calculator
-  placements?: Placement[];          // only for carbon calculator
-  rating_thresholds?: RatingThreshold[]; // only for material/chemical/durability
+  rating_thresholds?: RatingThreshold[];
 }
 
 // -------------------------------------------------------------
@@ -129,20 +103,6 @@ export interface CalculatorRow {
   description: string | null;
   config: unknown;   // raw JSONB — parsed in service layer
   status: Status;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CarbonFactorLibraryRow {
-  id: number;
-  name: string;
-  category: string | null;
-  value: string;     // pg numeric → string
-  unit: string;
-  justification: string | null;
-  source: string | null;
-  confidence: ConfidenceLevel;
-  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -223,37 +183,6 @@ export interface PatchFieldsInput {
   fields: CalculatorField[];
 }
 
-export interface PatchFormulaInput {
-  formula: FormulaConfig;
-}
-
-export interface PatchPlacementsInput {
-  placements: Placement[];
-}
-
-// --- Carbon Factors Library ---
-
-export interface CreateCarbonFactorInput {
-  name: string;
-  category?: string;
-  value: number;
-  unit: string;
-  justification?: string;
-  source?: string;
-  confidence?: ConfidenceLevel;
-}
-
-export interface UpdateCarbonFactorInput {
-  name?: string;
-  category?: string;
-  value?: number;
-  unit?: string;
-  justification?: string;
-  source?: string;
-  confidence?: ConfidenceLevel;
-  is_active?: boolean;
-}
-
 // --- User-facing calculator ---
 
 export interface CalculatorConfigResponse {
@@ -261,8 +190,8 @@ export interface CalculatorConfigResponse {
   type: CalculatorType;
   name: string;
   description: string | null;
+  status: Status;
   fields: CalculatorField[];
-  formula: FormulaConfig | null;
   rating_thresholds: RatingThreshold[] | null;
 }
 
@@ -270,38 +199,6 @@ export interface UserCalculationInput {
   product_id: number;
   calculator_type: CalculatorType;
   inputs: Record<string, unknown>;  // field_key → value(s)
-}
-
-export interface BreakdownItem {
-  field_key: string;
-  field_label: string;
-  selected_option: string;
-  co2_value: number;
-  unit: string;
-  role: FieldRole;
-  justification: string;
-  reduction_tip?: string; // shown if this field has high impact
-}
-
-export interface PlacementResult {
-  headline: string;
-  body: string;
-  cta_label: string;
-  cta_url: string;
-}
-
-export interface CarbonCalculationResult {
-  total_kg_co2e: number;
-  breakdown: BreakdownItem[];
-  modifiers: Array<{
-    field_key: string;
-    field_label: string;
-    selected_option: string;
-    percent: number;
-  }>;
-  placement: PlacementResult | null;
-  confidence: ConfidenceLevel;
-  warnings: string[];
 }
 
 export interface ScoreCalculationResult {
@@ -313,10 +210,11 @@ export interface ScoreCalculationResult {
     field_label: string;
     selected_option: string;
     score: number;
+    justification: string;
   }>;
 }
 
-export type CalculationResult = CarbonCalculationResult | ScoreCalculationResult;
+export type CalculationResult = ScoreCalculationResult;
 
 // --- Pagination ---
 

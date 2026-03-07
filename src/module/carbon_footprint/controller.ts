@@ -6,7 +6,6 @@ import {
   SubcategoryService,
   ProductService,
   CalculatorService,
-  CarbonFactorLibraryService,
   UserCalculatorService,
   NotFoundError,
   ValidationError,
@@ -21,7 +20,6 @@ import {
   getInt,
   parseStatus,
   parseCalculatorType,
-  parseConfidence,
   sendSuccess,
   sendError,
   sendNotFound,
@@ -39,8 +37,6 @@ import type {
   UpdateProductInput,
   CreateCalculatorInput,
   UpdateCalculatorInput,
-  CreateCarbonFactorInput,
-  UpdateCarbonFactorInput,
   UserCalculationInput,
   CalculatorType,
 } from "./types.ts";
@@ -392,7 +388,7 @@ export class CalculatorController {
 
       if (!name) return sendBadRequest(res, "name is required");
       if (!product_id) return sendBadRequest(res, "product_id is required");
-      if (!type) return sendBadRequest(res, "type must be: carbon | material | chemical | durability");
+      if (!type) return sendBadRequest(res, "type must be: material | chemical | durability");
 
       const rawConfig = body["config"];
       if (typeof rawConfig !== "object" || rawConfig === null || Array.isArray(rawConfig)) {
@@ -485,42 +481,6 @@ export class CalculatorController {
     }
   }
 
-  /** PATCH /api/admin/calculators/:id/formula */
-  static async patchFormula(req: Request, res: Response): Promise<Response> {
-    try {
-      const id = parseParamId(req.params["id"]);
-      if (!id) return sendBadRequest(res, "id must be a positive integer");
-
-      const body = asObject(req.body);
-      const formula = body["formula"];
-      if (typeof formula !== "object" || formula === null || Array.isArray(formula)) {
-        return sendBadRequest(res, "formula must be an object");
-      }
-
-      const row = await CalculatorService.patchFormula(id, formula);
-      return sendSuccess(res, row);
-    } catch (e) {
-      return handleError(res, e, "Failed to patch calculator formula");
-    }
-  }
-
-  /** PATCH /api/admin/calculators/:id/placements */
-  static async patchPlacements(req: Request, res: Response): Promise<Response> {
-    try {
-      const id = parseParamId(req.params["id"]);
-      if (!id) return sendBadRequest(res, "id must be a positive integer");
-
-      const body = asObject(req.body);
-      const placements = body["placements"];
-      if (!Array.isArray(placements)) return sendBadRequest(res, "placements must be an array");
-
-      const row = await CalculatorService.patchPlacements(id, placements);
-      return sendSuccess(res, row);
-    } catch (e) {
-      return handleError(res, e, "Failed to patch calculator placements");
-    }
-  }
-
   /** DELETE /api/admin/calculators/:id */
   static async remove(req: Request, res: Response): Promise<Response> {
     try {
@@ -531,126 +491,6 @@ export class CalculatorController {
       return sendSuccess(res, { deleted: true });
     } catch (e) {
       return handleError(res, e, "Failed to delete calculator");
-    }
-  }
-}
-
-// =============================================================
-// CarbonFactorLibraryController
-// =============================================================
-
-export class CarbonFactorLibraryController {
-  /** POST /api/admin/carbon-factors */
-  static async create(req: Request, res: Response): Promise<Response> {
-    try {
-      const body = asObject(req.body);
-      const name = getString(body, "name");
-      const value = getNumber(body, "value");
-      const unit = getString(body, "unit");
-
-      if (!name) return sendBadRequest(res, "name is required");
-      if (value === null) return sendBadRequest(res, "value is required and must be a number");
-      if (!unit) return sendBadRequest(res, "unit is required");
-
-      const input: CreateCarbonFactorInput = {
-        name,
-        category: getOptionalString(body, "category"),
-        value,
-        unit,
-        justification: getOptionalString(body, "justification"),
-        source: getOptionalString(body, "source"),
-        confidence: parseConfidence(body["confidence"], "low"),
-      };
-
-      const row = await CarbonFactorLibraryService.create(input);
-      return sendSuccess(res, row, 201);
-    } catch (e) {
-      return handleError(res, e, "Failed to create carbon factor");
-    }
-  }
-
-  /** GET /api/admin/carbon-factors */
-  static async list(req: Request, res: Response): Promise<Response> {
-    try {
-      const category = typeof req.query["category"] === "string"
-        ? req.query["category"]
-        : undefined;
-      const search = typeof req.query["search"] === "string"
-        ? req.query["search"]
-        : undefined;
-      const is_active = req.query["is_active"] === "true"
-        ? true
-        : req.query["is_active"] === "false"
-        ? false
-        : undefined;
-      const limit = getInt(req.query["limit"], 50, 1, 200);
-      const offset = getInt(req.query["offset"], 0, 0, 50000);
-
-      const result = await CarbonFactorLibraryService.list({
-        category,
-        search,
-        is_active,
-        limit,
-        offset,
-      });
-      return sendSuccess(res, result);
-    } catch (e) {
-      return handleError(res, e, "Failed to list carbon factors");
-    }
-  }
-
-  /** GET /api/admin/carbon-factors/:id */
-  static async getById(req: Request, res: Response): Promise<Response> {
-    try {
-      const id = parseParamId(req.params["id"]);
-      if (!id) return sendBadRequest(res, "id must be a positive integer");
-
-      const row = await CarbonFactorLibraryService.getById(id);
-      return sendSuccess(res, row);
-    } catch (e) {
-      return handleError(res, e, "Failed to get carbon factor");
-    }
-  }
-
-  /** PUT /api/admin/carbon-factors/:id */
-  static async update(req: Request, res: Response): Promise<Response> {
-    try {
-      const id = parseParamId(req.params["id"]);
-      if (!id) return sendBadRequest(res, "id must be a positive integer");
-
-      const body = asObject(req.body);
-      const input: UpdateCarbonFactorInput = {
-        name: getOptionalString(body, "name"),
-        category: getOptionalString(body, "category"),
-        value: getOptionalNumber(body, "value"),
-        unit: getOptionalString(body, "unit"),
-        justification: getOptionalString(body, "justification"),
-        source: getOptionalString(body, "source"),
-        confidence: body["confidence"] !== undefined
-          ? parseConfidence(body["confidence"], "low")
-          : undefined,
-        is_active: body["is_active"] !== undefined
-          ? getBoolean(body, "is_active")
-          : undefined,
-      };
-
-      const row = await CarbonFactorLibraryService.update(id, input);
-      return sendSuccess(res, row);
-    } catch (e) {
-      return handleError(res, e, "Failed to update carbon factor");
-    }
-  }
-
-  /** DELETE /api/admin/carbon-factors/:id */
-  static async remove(req: Request, res: Response): Promise<Response> {
-    try {
-      const id = parseParamId(req.params["id"]);
-      if (!id) return sendBadRequest(res, "id must be a positive integer");
-
-      await CarbonFactorLibraryService.delete(id);
-      return sendSuccess(res, { deleted: true });
-    } catch (e) {
-      return handleError(res, e, "Failed to delete carbon factor");
     }
   }
 }
@@ -704,13 +544,13 @@ export class PublicCalculatorController {
     }
   }
 
-  /** GET /api/calculator/config/:productId?type=carbon */
+  /** GET /api/calculator/config/:productId?type=material|chemical|durability */
   static async getConfig(req: Request, res: Response): Promise<Response> {
     try {
       const productId = parseParamId(req.params["productId"]);
       if (!productId) return sendBadRequest(res, "productId must be a positive integer");
 
-      const type = parseCalculatorType(req.query["type"]) ?? "carbon" as CalculatorType;
+      const type = parseCalculatorType(req.query["type"]) ?? "material" as CalculatorType;
 
       const config = await UserCalculatorService.getConfig(productId, type);
       return sendSuccess(res, config);
@@ -726,7 +566,7 @@ export class PublicCalculatorController {
       if (!productId) return sendBadRequest(res, "productId must be a positive integer");
 
       const body = asObject(req.body);
-      const calculator_type = parseCalculatorType(body["calculator_type"]) ?? "carbon" as CalculatorType;
+      const calculator_type = parseCalculatorType(body["calculator_type"]) ?? "material" as CalculatorType;
       const rawInputs = body["inputs"];
 
       if (typeof rawInputs !== "object" || rawInputs === null || Array.isArray(rawInputs)) {

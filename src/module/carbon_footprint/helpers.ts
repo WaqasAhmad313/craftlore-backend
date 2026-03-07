@@ -7,9 +7,6 @@ import type {
   FieldOption,
   FieldRole,
   FieldType,
-  FormulaConfig,
-  Placement,
-  PlacementCondition,
   RatingThreshold,
   Status,
 } from "./types.ts";
@@ -120,7 +117,6 @@ export function getObject(
 
 const VALID_STATUSES: Status[] = ["active", "draft", "archived"];
 const VALID_CALCULATOR_TYPES: CalculatorType[] = [
-  "carbon",
   "material",
   "chemical",
   "durability",
@@ -308,110 +304,7 @@ export function validateCalculatorConfig(
     });
   }
 
-  // --- formula (optional, carbon only) ---
-  let formula: FormulaConfig | undefined;
-  const rawFormula = raw["formula"];
-
-  if (rawFormula !== undefined && rawFormula !== null) {
-    if (!isPlainObject(rawFormula)) {
-      errors.push({
-        path: "config.formula",
-        message: "formula must be an object",
-      });
-    } else {
-      const base_field = getString(rawFormula, "base_field");
-      if (!base_field) {
-        errors.push({
-          path: "config.formula.base_field",
-          message: "formula.base_field is required",
-        });
-      }
-
-      const additives = rawFormula["additives"];
-      const percent_modifiers = rawFormula["percent_modifiers"];
-
-      formula = {
-        base_field,
-        weight_field: getOptionalString(rawFormula, "weight_field"),
-        additives: isArray(additives)
-          ? additives.filter((x): x is string => typeof x === "string")
-          : [],
-        percent_modifiers: isArray(percent_modifiers)
-          ? percent_modifiers.filter((x): x is string => typeof x === "string")
-          : [],
-      };
-    }
-  }
-
-  // --- placements (optional, carbon only) ---
-  let placements: Placement[] | undefined;
-  const rawPlacements = raw["placements"];
-
-  if (rawPlacements !== undefined && rawPlacements !== null) {
-    if (!isArray(rawPlacements)) {
-      errors.push({
-        path: "config.placements",
-        message: "placements must be an array",
-      });
-    } else {
-      placements = [];
-      for (let i = 0; i < rawPlacements.length; i++) {
-        const pl = rawPlacements[i];
-        const pp = `config.placements[${i}]`;
-
-        if (!isPlainObject(pl)) {
-          errors.push({ path: pp, message: "each placement must be an object" });
-          continue;
-        }
-
-        const headline = getString(pl, "headline");
-        const body = getString(pl, "body");
-        const cta_label = getString(pl, "cta_label");
-        const cta_url = getString(pl, "cta_url");
-
-        if (!headline)
-          errors.push({ path: `${pp}.headline`, message: "headline required" });
-        if (!body)
-          errors.push({ path: `${pp}.body`, message: "body required" });
-        if (!cta_label)
-          errors.push({
-            path: `${pp}.cta_label`,
-            message: "cta_label required",
-          });
-        if (!cta_url)
-          errors.push({ path: `${pp}.cta_url`, message: "cta_url required" });
-
-        const rawCond = pl["condition"];
-        const condition: PlacementCondition = {};
-
-        if (isPlainObject(rawCond)) {
-          if (rawCond["always"] === true) condition.always = true;
-          const above = getNumber(rawCond, "co2_above");
-          const below = getNumber(rawCond, "co2_below");
-          const scoreAbove = getNumber(rawCond, "score_above");
-          const scoreBelow = getNumber(rawCond, "score_below");
-          if (above !== null) condition.co2_above = above;
-          if (below !== null) condition.co2_below = below;
-          if (scoreAbove !== null) condition.score_above = scoreAbove;
-          if (scoreBelow !== null) condition.score_below = scoreBelow;
-        }
-
-        if (!headline || !body || !cta_label || !cta_url) continue;
-
-        placements.push({
-          condition,
-          headline,
-          body,
-          cta_label,
-          cta_url,
-          display_order:
-            typeof pl["display_order"] === "number" ? pl["display_order"] : i,
-        });
-      }
-    }
-  }
-
-  // --- rating_thresholds (optional, supplementary calculators) ---
+  // --- rating_thresholds (optional) ---
   let rating_thresholds: RatingThreshold[] | undefined;
   const rawThresholds = raw["rating_thresholds"];
 
@@ -462,8 +355,6 @@ export function validateCalculatorConfig(
     errors: [],
     config: {
       fields,
-      ...(formula !== undefined ? { formula } : {}),
-      ...(placements !== undefined ? { placements } : {}),
       ...(rating_thresholds !== undefined ? { rating_thresholds } : {}),
     },
   };

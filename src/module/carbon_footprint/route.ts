@@ -4,7 +4,6 @@ import {
   SubcategoryController,
   ProductController,
   CalculatorController,
-  CarbonFactorLibraryController,
   PublicCalculatorController,
   productImageMiddleware,
 } from "./controller.ts";
@@ -56,17 +55,6 @@ router.get("/admin/calculators/by-product/:productId", CalculatorController.list
 router.get("/admin/calculators/:id", CalculatorController.getById);
 router.put("/admin/calculators/:id", CalculatorController.update);
 router.patch("/admin/calculators/:id/fields", CalculatorController.patchFields);
-router.patch("/admin/calculators/:id/formula", CalculatorController.patchFormula);
-router.patch("/admin/calculators/:id/placements", CalculatorController.patchPlacements);
 router.delete("/admin/calculators/:id", CalculatorController.remove);
-
-// =============================================================
-// ADMIN — Carbon Factors Library
-// =============================================================
-router.post("/admin/carbon-factors", CarbonFactorLibraryController.create);
-router.get("/admin/carbon-factors", CarbonFactorLibraryController.list);
-router.get("/admin/carbon-factors/:id", CarbonFactorLibraryController.getById);
-router.put("/admin/carbon-factors/:id", CarbonFactorLibraryController.update);
-router.delete("/admin/carbon-factors/:id", CarbonFactorLibraryController.remove);
 
 export default router;
