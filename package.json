@@ -5,9 +5,9 @@
   "main": "dist/app.js",
   "type": "module",
   "scripts": {
-    "dev": "NODE_NO_WARNINGS=1 ts-node --esm src/server.ts",
+    "dev": "NODE_NO_WARNINGS=1 tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/src/server.js"
+    "start": "NODE_NO_WARNINGS=1 tsx src/server.ts"
   },
   "keywords": [],
   "author": "",

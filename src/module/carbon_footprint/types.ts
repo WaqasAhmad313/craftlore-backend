@@ -29,7 +29,7 @@ export interface FieldOption {
   value: number;           // score value (lower = better)
   unit: string;            // "pts" | "%" etc.
   justification: string;   // shown in result breakdown
-  source?: string;
+  source?: string | undefined;
   display_order: number;
 }
 
@@ -39,8 +39,8 @@ export interface CalculatorField {
   type: FieldType;
   role: FieldRole;
   required: boolean;
-  unit?: string;
-  placeholder?: string;
+  unit?: string | undefined;
+  placeholder?: string | undefined;
   display_order: number;
   options: FieldOption[];
 }
@@ -53,7 +53,7 @@ export interface RatingThreshold {
 
 export interface CalculatorConfig {
   fields: CalculatorField[];
-  rating_thresholds?: RatingThreshold[];
+  rating_thresholds?: RatingThreshold[] | undefined;
 }
 
 export interface CategoryRow {
@@ -109,13 +109,13 @@ export interface CalculatorRow {
 export interface CreateCategoryInput {
   name: string;
   slug: string;
-  status?: Status;
+  status?: Status | undefined;
 }
 
 export interface UpdateCategoryInput {
-  name?: string;
-  slug?: string;
-  status?: Status;
+  name?: string | undefined;
+  slug?: string | undefined;
+  status?: Status | undefined;
 }
 
 // --- Subcategory ---
@@ -124,13 +124,13 @@ export interface CreateSubcategoryInput {
   category_id: number;
   name: string;
   slug: string;
-  status?: Status;
+  status?: Status | undefined;
 }
 
 export interface UpdateSubcategoryInput {
-  name?: string;
-  slug?: string;
-  status?: Status;
+  name?: string | undefined;
+  slug?: string | undefined;
+  status?: Status | undefined;
 }
 
 // --- Product ---
@@ -139,19 +139,19 @@ export interface CreateProductInput {
   subcategory_id: number;
   name: string;
   slug: string;
-  description?: string;
-  image_url?: string;
-  ecommerce_url?: string;
-  status?: Status;
+  description?: string | undefined;
+  image_url?: string | undefined;
+  ecommerce_url?: string | undefined;
+  status?: Status | undefined;
 }
 
 export interface UpdateProductInput {
-  name?: string;
-  slug?: string;
-  description?: string;
-  image_url?: string;
-  ecommerce_url?: string;
-  status?: Status;
+  name?: string | undefined;
+  slug?: string | undefined;
+  description?: string | undefined;
+  image_url?: string | undefined;
+  ecommerce_url?: string | undefined;
+  status?: Status | undefined;
 }
 
 // --- Calculator ---
@@ -160,16 +160,16 @@ export interface CreateCalculatorInput {
   product_id: number;
   type: CalculatorType;
   name: string;
-  description?: string;
+  description?: string | undefined;
   config: CalculatorConfig;
-  status?: Status;
+  status?: Status | undefined;
 }
 
 export interface UpdateCalculatorInput {
-  name?: string;
-  description?: string;
-  config?: CalculatorConfig;
-  status?: Status;
+  name?: string | undefined;
+  description?: string | undefined;
+  config?: CalculatorConfig | undefined;
+  status?: Status | undefined;
 }
 
 export interface PatchFieldsInput {
