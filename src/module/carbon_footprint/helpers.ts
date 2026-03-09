@@ -1,9 +1,13 @@
+// =============================================================
+// helpers.ts — CLEE Calculator Module
+// Pure utility functions. No DB access, no req/res.
+// =============================================================
+
 import type { Response } from "express";
 import type {
   CalculatorConfig,
   CalculatorField,
   CalculatorType,
-  ConfidenceLevel,
   FieldOption,
   FieldRole,
   FieldType,
@@ -135,7 +139,6 @@ const VALID_FIELD_ROLES: FieldRole[] = [
   "percent_modifier",
   "informational",
 ];
-const VALID_CONFIDENCE: ConfidenceLevel[] = ["low", "medium", "high"];
 
 export function parseStatus(v: unknown, fallback: Status = "draft"): Status {
   if (typeof v === "string" && VALID_STATUSES.includes(v as Status)) {
@@ -168,20 +171,8 @@ export function parseFieldRole(v: unknown): FieldRole | null {
   return null;
 }
 
-export function parseConfidence(
-  v: unknown,
-  fallback: ConfidenceLevel = "low"
-): ConfidenceLevel {
-  if (typeof v === "string" && VALID_CONFIDENCE.includes(v as ConfidenceLevel)) {
-    return v as ConfidenceLevel;
-  }
-  return fallback;
-}
-
 // -------------------------------------------------------------
-// JSONB config validator & parser
-// Validates the full CalculatorConfig shape at runtime
-// before we trust it into the database
+// JSONB config validator
 // -------------------------------------------------------------
 
 export interface ConfigValidationError {
@@ -234,22 +225,13 @@ export function validateCalculatorConfig(
       typeof f["display_order"] === "number" ? f["display_order"] : i;
 
     if (!key) errors.push({ path: `${p}.key`, message: "key is required" });
-    if (!label)
-      errors.push({ path: `${p}.label`, message: "label is required" });
-    if (!fieldType)
-      errors.push({
-        path: `${p}.type`,
-        message: `type must be one of: ${VALID_FIELD_TYPES.join(", ")}`,
-      });
-    if (!fieldRole)
-      errors.push({
-        path: `${p}.role`,
-        message: `role must be one of: ${VALID_FIELD_ROLES.join(", ")}`,
-      });
+    if (!label) errors.push({ path: `${p}.label`, message: "label is required" });
+    if (!fieldType) errors.push({ path: `${p}.type`, message: `type must be one of: ${VALID_FIELD_TYPES.join(", ")}` });
+    if (!fieldRole) errors.push({ path: `${p}.role`, message: `role must be one of: ${VALID_FIELD_ROLES.join(", ")}` });
 
     if (!key || !label || !fieldType || !fieldRole) continue;
 
-    // options validation
+    // options
     const rawOptions = f["options"];
     const options: FieldOption[] = [];
 
@@ -267,15 +249,9 @@ export function validateCalculatorConfig(
         const oValue = getNumber(o, "value");
         const oUnit = getString(o, "unit");
 
-        if (!oLabel)
-          errors.push({ path: `${op}.label`, message: "option label required" });
-        if (oValue === null)
-          errors.push({
-            path: `${op}.value`,
-            message: "option value must be a number",
-          });
-        if (!oUnit)
-          errors.push({ path: `${op}.unit`, message: "option unit required" });
+        if (!oLabel) errors.push({ path: `${op}.label`, message: "option label required" });
+        if (oValue === null) errors.push({ path: `${op}.value`, message: "option value must be a number" });
+        if (!oUnit) errors.push({ path: `${op}.unit`, message: "option unit required" });
 
         if (!oLabel || oValue === null || !oUnit) continue;
 
@@ -329,15 +305,9 @@ export function validateCalculatorConfig(
         const label = getString(t, "label");
         const color = getString(t, "color");
 
-        if (max_score === null)
-          errors.push({
-            path: `${tp}.max_score`,
-            message: "max_score must be a number",
-          });
-        if (!label)
-          errors.push({ path: `${tp}.label`, message: "label required" });
-        if (!color)
-          errors.push({ path: `${tp}.color`, message: "color required" });
+        if (max_score === null) errors.push({ path: `${tp}.max_score`, message: "max_score must be a number" });
+        if (!label) errors.push({ path: `${tp}.label`, message: "label required" });
+        if (!color) errors.push({ path: `${tp}.color`, message: "color required" });
 
         if (max_score === null || !label || !color) continue;
 
@@ -346,9 +316,7 @@ export function validateCalculatorConfig(
     }
   }
 
-  if (errors.length > 0) {
-    return { valid: false, errors };
-  }
+  if (errors.length > 0) return { valid: false, errors };
 
   return {
     valid: true,

@@ -17,10 +17,8 @@ export type FieldType =
 export type FieldRole =
   | "base"              // base score value
   | "additive"          // flat score added to total
-  | "percent_modifier"  // percent applied on total (negative = reduction)
+  | "percent_modifier"  // percent applied on total
   | "informational";    // shown to user, ignored in scoring
-
-export type ConfidenceLevel = "low" | "medium" | "high";
 
 // -------------------------------------------------------------
 // JSONB shape — config stored inside calculators.config
@@ -28,40 +26,35 @@ export type ConfidenceLevel = "low" | "medium" | "high";
 
 export interface FieldOption {
   label: string;
-  value: number;           // score value
-  unit: string;            // pts | percent | score etc.
-  justification: string;   // why this value — shown in result breakdown
-  source?: string;         // study, reference, or note
+  value: number;           // score value (lower = better)
+  unit: string;            // "pts" | "%" etc.
+  justification: string;   // shown in result breakdown
+  source?: string;
   display_order: number;
 }
 
 export interface CalculatorField {
-  key: string;             // unique within this calculator e.g. "material_type"
-  label: string;           // shown to user e.g. "Material Type"
+  key: string;
+  label: string;
   type: FieldType;
   role: FieldRole;
   required: boolean;
-  unit?: string;           // for number/dimension/distance fields e.g. "kg" "cm"
-  placeholder?: string;    // for text/number fields
+  unit?: string;
+  placeholder?: string;
   display_order: number;
-  options: FieldOption[];  // empty array for number/dimension/text fields
+  options: FieldOption[];
 }
 
 export interface RatingThreshold {
-  max_score: number;       // score below or equal to this gets this label
-  label: string;           // e.g. "Highly Sustainable"
-  color: string;           // green | yellow | red
+  max_score: number;  // score <= this → this rating applies
+  label: string;      // e.g. "Highly Sustainable"
+  color: string;      // "green" | "yellow" | "red"
 }
 
-// The full JSONB config stored in calculators.config
 export interface CalculatorConfig {
   fields: CalculatorField[];
   rating_thresholds?: RatingThreshold[];
 }
-
-// -------------------------------------------------------------
-// DB row types — raw rows returned from postgres
-// -------------------------------------------------------------
 
 export interface CategoryRow {
   id: number;
@@ -198,20 +191,22 @@ export interface CalculatorConfigResponse {
 export interface UserCalculationInput {
   product_id: number;
   calculator_type: CalculatorType;
-  inputs: Record<string, unknown>;  // field_key → value(s)
+  inputs: Record<string, unknown>;
+}
+
+export interface ScoreBreakdownItem {
+  field_key: string;
+  field_label: string;
+  selected_option: string;
+  score: number;
+  justification: string;
 }
 
 export interface ScoreCalculationResult {
   total_score: number;
   rating: string;
   color: string;
-  breakdown: Array<{
-    field_key: string;
-    field_label: string;
-    selected_option: string;
-    score: number;
-    justification: string;
-  }>;
+  breakdown: ScoreBreakdownItem[];
 }
 
 export type CalculationResult = ScoreCalculationResult;

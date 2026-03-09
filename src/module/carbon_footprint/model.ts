@@ -1,9 +1,12 @@
+// =============================================================
+// model.ts — CLEE Calculator Module
+// Raw DB access only. No business logic.
+// =============================================================
+
 import { db } from "../../config/db.ts";
 import type {
-  CarbonFactorLibraryRow,
   CategoryRow,
   CalculatorRow,
-  CreateCarbonFactorInput,
   CreateCalculatorInput,
   CreateCategoryInput,
   CreateProductInput,
@@ -11,7 +14,6 @@ import type {
   PaginationParams,
   ProductRow,
   SubcategoryRow,
-  UpdateCarbonFactorInput,
   UpdateCalculatorInput,
   UpdateCategoryInput,
   UpdateProductInput,
@@ -86,18 +88,9 @@ export class CategoryModel {
     const values: unknown[] = [];
     let i = 1;
 
-    if (input.name !== undefined) {
-      sets.push(`name = $${i++}`);
-      values.push(input.name);
-    }
-    if (input.slug !== undefined) {
-      sets.push(`slug = $${i++}`);
-      values.push(input.slug);
-    }
-    if (input.status !== undefined) {
-      sets.push(`status = $${i++}`);
-      values.push(input.status);
-    }
+    if (input.name !== undefined) { sets.push(`name = $${i++}`); values.push(input.name); }
+    if (input.slug !== undefined) { sets.push(`slug = $${i++}`); values.push(input.slug); }
+    if (input.status !== undefined) { sets.push(`status = $${i++}`); values.push(input.status); }
 
     if (sets.length === 0) return CategoryModel.findById(id);
 
@@ -126,9 +119,7 @@ export class CategoryModel {
 // =============================================================
 
 export class SubcategoryModel {
-  static async create(
-    input: CreateSubcategoryInput
-  ): Promise<SubcategoryRow> {
+  static async create(input: CreateSubcategoryInput): Promise<SubcategoryRow> {
     const q = `
       INSERT INTO content.subcategories
         (category_id, name, slug, status)
@@ -430,7 +421,6 @@ export class CalculatorModel {
     return r.rows[0] ?? null;
   }
 
-  // Patch only the config JSONB — used by fields/formula/placements patch endpoints
   static async patchConfig(
     id: number,
     configPatch: Record<string, unknown>
@@ -451,153 +441,6 @@ export class CalculatorModel {
   static async delete(id: number): Promise<boolean> {
     const r = await db.query(
       "DELETE FROM content.calculators WHERE id = $1",
-      [id]
-    );
-    return (r.rowCount ?? 0) > 0;
-  }
-}
-
-// =============================================================
-// CarbonFactorLibraryModel
-// =============================================================
-
-export class CarbonFactorLibraryModel {
-  static async create(
-    input: CreateCarbonFactorInput
-  ): Promise<CarbonFactorLibraryRow> {
-    const q = `
-      INSERT INTO content.carbon_factors_library
-        (name, category, value, unit, justification, source, confidence)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING id, name, category, value::text, unit, justification, source,
-                confidence, is_active, created_at, updated_at
-    `;
-    const r = await db.query<CarbonFactorLibraryRow>(q, [
-      input.name,
-      input.category ?? null,
-      input.value,
-      input.unit,
-      input.justification ?? null,
-      input.source ?? null,
-      input.confidence ?? "low",
-    ]);
-    return r.rows[0]!;
-  }
-
-  static async findAll(params: {
-    category?: string;
-    is_active?: boolean;
-    search?: string;
-    limit: number;
-    offset: number;
-  }): Promise<CarbonFactorLibraryRow[]> {
-    const where: string[] = [];
-    const values: unknown[] = [];
-    let i = 1;
-
-    if (params.category) {
-      where.push(`category = $${i++}`);
-      values.push(params.category);
-    }
-    if (typeof params.is_active === "boolean") {
-      where.push(`is_active = $${i++}`);
-      values.push(params.is_active);
-    }
-    if (params.search?.trim()) {
-      where.push(`(name ILIKE $${i} OR category ILIKE $${i})`);
-      values.push(`%${params.search.trim()}%`);
-      i++;
-    }
-
-    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-    values.push(params.limit);
-    const limitIdx = i++;
-    values.push(params.offset);
-    const offsetIdx = i++;
-
-    const q = `
-      SELECT id, name, category, value::text, unit, justification, source,
-             confidence, is_active, created_at, updated_at
-      FROM content.carbon_factors_library
-      ${whereSql}
-      ORDER BY category ASC NULLS LAST, name ASC
-      LIMIT $${limitIdx} OFFSET $${offsetIdx}
-    `;
-    const r = await db.query<CarbonFactorLibraryRow>(q, values);
-    return r.rows;
-  }
-
-  static async countAll(params: {
-    category?: string;
-    is_active?: boolean;
-    search?: string;
-  }): Promise<number> {
-    const where: string[] = [];
-    const values: unknown[] = [];
-    let i = 1;
-
-    if (params.category) { where.push(`category = $${i++}`); values.push(params.category); }
-    if (typeof params.is_active === "boolean") { where.push(`is_active = $${i++}`); values.push(params.is_active); }
-    if (params.search?.trim()) {
-      where.push(`(name ILIKE $${i} OR category ILIKE $${i})`);
-      values.push(`%${params.search.trim()}%`);
-      i++;
-    }
-
-    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-    const r = await db.query<{ count: string }>(
-      `SELECT COUNT(*)::text AS count FROM content.carbon_factors_library ${whereSql}`,
-      values
-    );
-    return parseInt(r.rows[0]!.count, 10);
-  }
-
-  static async findById(id: number): Promise<CarbonFactorLibraryRow | null> {
-    const q = `
-      SELECT id, name, category, value::text, unit, justification, source,
-             confidence, is_active, created_at, updated_at
-      FROM content.carbon_factors_library
-      WHERE id = $1
-      LIMIT 1
-    `;
-    const r = await db.query<CarbonFactorLibraryRow>(q, [id]);
-    return r.rows[0] ?? null;
-  }
-
-  static async update(
-    id: number,
-    input: UpdateCarbonFactorInput
-  ): Promise<CarbonFactorLibraryRow | null> {
-    const sets: string[] = [];
-    const values: unknown[] = [];
-    let i = 1;
-
-    if (input.name !== undefined) { sets.push(`name = $${i++}`); values.push(input.name); }
-    if (input.category !== undefined) { sets.push(`category = $${i++}`); values.push(input.category); }
-    if (input.value !== undefined) { sets.push(`value = $${i++}`); values.push(input.value); }
-    if (input.unit !== undefined) { sets.push(`unit = $${i++}`); values.push(input.unit); }
-    if (input.justification !== undefined) { sets.push(`justification = $${i++}`); values.push(input.justification); }
-    if (input.source !== undefined) { sets.push(`source = $${i++}`); values.push(input.source); }
-    if (input.confidence !== undefined) { sets.push(`confidence = $${i++}`); values.push(input.confidence); }
-    if (input.is_active !== undefined) { sets.push(`is_active = $${i++}`); values.push(input.is_active); }
-
-    if (sets.length === 0) return CarbonFactorLibraryModel.findById(id);
-
-    values.push(id);
-    const q = `
-      UPDATE content.carbon_factors_library
-      SET ${sets.join(", ")}
-      WHERE id = $${i}
-      RETURNING id, name, category, value::text, unit, justification, source,
-                confidence, is_active, created_at, updated_at
-    `;
-    const r = await db.query<CarbonFactorLibraryRow>(q, values);
-    return r.rows[0] ?? null;
-  }
-
-  static async delete(id: number): Promise<boolean> {
-    const r = await db.query(
-      "DELETE FROM content.carbon_factors_library WHERE id = $1",
       [id]
     );
     return (r.rowCount ?? 0) > 0;
