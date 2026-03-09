@@ -30,7 +30,7 @@ const app: Application = express();
 app.use(morgan("dev"));
 
 const allowedOrigins = new Set(
-  [process.env.FRONTEND_URL, process.env.FRONTEND_URL_1].filter(
+  [process.env.APP_URL, process.env.FRONTEND_URL].filter(
     (v): v is string => typeof v === "string" && v.length > 0,
   ),
 );
