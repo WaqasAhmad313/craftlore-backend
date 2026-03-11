@@ -24,6 +24,11 @@ import mailerRoute from "./module/mailer/route.ts";
 import careerRoute from "./module/career/route.ts";
 import csemeRoute from "./module/cseme/route.ts";
 import crvasRoute from "./module/crvas/route.ts";
+import dashAuthRoute from "./module/dashboard/auth/route.ts"
+import dashActivityLogsRoute from "./module/dashboard/activity_logs/route.ts";
+import dashAccessManagementRoute from "./module/dashboard/access_management/route.ts";
+import dashRolesRoute from "./module/dashboard/roles/route.ts";
+import dashPendingChangesRoute from "./module/dashboard/pending_changes/route.ts";
 
 const app: Application = express();
 
@@ -38,7 +43,7 @@ const allowedOrigins = new Set(
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin) return callback(null, true); // curl/postman
+      if (!origin) return callback(null, true);
       if (allowedOrigins.has(origin)) return callback(null, true);
       return callback(new Error(`CORS blocked origin: ${origin}`));
     },
@@ -58,6 +63,11 @@ app.use("/api/auth-scrape", authScrape);
 app.use("/api/ambassadors", ambassadorRoute);
 app.use("/api/clie", clieRoute);
 app.use("/api/cms", cmsRoute);
+app.use("/api/dashboard/auth", dashAuthRoute);
+app.use("/api/dashboard/logs", dashActivityLogsRoute);
+app.use("/api/dashboard/access", dashAccessManagementRoute);
+app.use("/api/dashboard/roles", dashRolesRoute);
+app.use("/api/dashboard/pending", dashPendingChangesRoute);
 app.use("/api/network", networkRoute);
 app.use("/api/courses", course);
 app.use("/api/evaluations", evaluation);
