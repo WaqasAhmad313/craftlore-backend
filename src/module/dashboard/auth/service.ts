@@ -41,10 +41,10 @@ export interface MagicLinkVerifyResult {
 // CONSTANTS
 // ============================================
 
-const OWNER_SESSION_DURATION_MS  = 1000 * 60 * 60 * 8;   // 8 hours
-const OTP_EXPIRY_MS              = 1000 * 60 * 10;         // 10 minutes
-const DEVICE_TOKEN_EXPIRY_MS     = 1000 * 60 * 60 * 24;   // 24 hours
-const MAX_TRUSTED_DEVICES        = 2;
+const OWNER_SESSION_DURATION_MS = 1000 * 60 * 60 * 8;  // 8 hours
+const OTP_EXPIRY_MS             = 1000 * 60 * 10;        // 10 minutes
+const DEVICE_TOKEN_EXPIRY_MS    = 1000 * 60 * 60 * 24;  // 24 hours
+const MAX_TRUSTED_DEVICES       = 2;
 
 // ============================================
 // HELPERS
@@ -55,7 +55,6 @@ function generateSecureToken(): string {
 }
 
 function generateOtp(): string {
-  // 6 digit OTP — zero padded
   const otp = crypto.randomInt(0, 1_000_000);
   return otp.toString().padStart(6, "0");
 }
@@ -65,7 +64,7 @@ function generateOtp(): string {
 // ============================================
 
 export class AuthService {
-  // ── Owner Login ─────────────────────────────
+  // -- Owner Login ----------------------------
 
   static async ownerLogin(params: {
     email: string;
@@ -84,7 +83,6 @@ export class AuthService {
       throw new Error("Account is inactive.");
     }
 
-    // Verify password
     const passwordValid = await argon2.verify(
       user.password_hash,
       params.password
@@ -94,7 +92,6 @@ export class AuthService {
       throw new Error("Invalid credentials.");
     }
 
-    // Verify secret access key
     const accessKeyValid = await argon2.verify(
       user.access_key_hash,
       params.accessKey
@@ -104,35 +101,60 @@ export class AuthService {
       throw new Error("Invalid credentials.");
     }
 
-    // Check trusted device
+    // -- Fingerprint / trusted device check ---
+    //
+    // Three possible states:
+    //
+    // 1. No trusted devices exist at all
+    //    -> First login ever
+    //    -> Accept, capture fingerprint, save as first trusted device
+    //
+    // 2. Trusted devices exist, fingerprint matches one
+    //    -> Known device, normal login
+    //
+    // 3. Trusted devices exist, fingerprint not found
+    //    -> Unknown device on established account
+    //    -> Send email approval, block login
+
     const trustedDevice = await AuthModel.findTrustedDevice(
       user.id,
       params.fingerprintHash
     );
 
     if (trustedDevice === null) {
-      // Unknown device — check if request already pending
-      await AuthService.handleUnknownOwnerDevice(user, params);
-      throw new Error(
-        "Unrecognized device. An approval request has been sent to your email."
-      );
+      const deviceCount = await AuthModel.countTrustedDevices(user.id);
+
+      if (deviceCount === 0) {
+        // First login ever -- capture fingerprint automatically
+        await AuthModel.insertTrustedDevice(
+          user.id,
+          params.fingerprintHash,
+          params.deviceMetadata as unknown as Record<string, unknown>
+        );
+      } else {
+        // Established account, unknown device -- send approval email
+        await AuthService.handleUnknownOwnerDevice(user, params);
+        throw new Error(
+          "Unrecognized device. An approval request has been sent to your email."
+        );
+      }
     }
 
     // Create session
-    const token      = generateSecureToken();
-    const expiresAt  = new Date(Date.now() + OWNER_SESSION_DURATION_MS);
-    const otp        = generateOtp();
-    const otpHash    = await argon2.hash(otp);
-    const otpExpiry  = new Date(Date.now() + OTP_EXPIRY_MS);
+    const token     = generateSecureToken();
+    const expiresAt = new Date(Date.now() + OWNER_SESSION_DURATION_MS);
+    const otp       = generateOtp();
+    const otpHash   = await argon2.hash(otp);
+    const otpExpiry = new Date(Date.now() + OTP_EXPIRY_MS);
 
     await AuthModel.insertSession({
-      userId:      user.id,
-      tokenHash:   token,
+      userId:       user.id,
+      tokenHash:    token,
       expiresAt,
       otpHash,
       otpExpiresAt: otpExpiry,
-      createdBy:   null,
-      isMagicLink: false,
+      createdBy:    null,
+      isMagicLink:  false,
     });
 
     await AuthModel.updateLastLogin(user.id);
@@ -144,7 +166,7 @@ export class AuthService {
     };
   }
 
-  // ── Handle Unknown Owner Device ─────────────
+  // -- Handle Unknown Owner Device ------------
 
   private static async handleUnknownOwnerDevice(
     user: DashboardUserRow,
@@ -165,13 +187,13 @@ export class AuthService {
     });
 
     await AuthMailer.sendDeviceApprovalRequest({
-      to:            user.email,
+      to:             user.email,
       approvalToken,
       deviceMetadata: params.deviceMetadata,
     });
   }
 
-  // ── Approve Owner Device ────────────────────
+  // -- Approve Owner Device -------------------
 
   static async approveOwnerDevice(approvalToken: string): Promise<void> {
     await AuthModel.expireStaleDeviceRequests();
@@ -194,7 +216,6 @@ export class AuthService {
       throw new Error("This approval link has expired.");
     }
 
-    // Check max device limit
     const deviceCount = await AuthModel.countTrustedDevices(request.user_id);
 
     if (deviceCount >= MAX_TRUSTED_DEVICES) {
@@ -212,8 +233,10 @@ export class AuthService {
     );
   }
 
-  // ── Magic Link OTP Verify ───────────────────
+  // -- Magic Link OTP Verify ------------------
   // Called when created user clicks magic link + enters OTP
+  // Fingerprint is captured HERE on first use
+  // Every subsequent request validated in authMiddleware
 
   static async verifyMagicLinkOtp(params: {
     tokenHash: string;
@@ -234,12 +257,10 @@ export class AuthService {
       throw new Error("This link has expired.");
     }
 
-    // OTP already verified — disallow re-verification
     if (session.otp_verified) {
       throw new Error("OTP already verified.");
     }
 
-    // OTP expired
     if (
       session.otp_expires_at === null ||
       new Date() > new Date(session.otp_expires_at)
@@ -247,19 +268,17 @@ export class AuthService {
       throw new Error("OTP has expired. Please request a new access link.");
     }
 
-    // OTP hash missing
     if (session.otp_hash === null) {
       throw new Error("Invalid session state.");
     }
 
-    // Verify OTP
     const otpValid = await argon2.verify(session.otp_hash, params.otp);
 
     if (!otpValid) {
       throw new Error("Invalid OTP.");
     }
 
-    // Lock fingerprint to session and mark OTP verified
+    // Lock fingerprint to session -- first and only capture for created users
     await AuthModel.verifyOtpAndLockFingerprint(
       session.id,
       params.fingerprintHash
@@ -271,13 +290,13 @@ export class AuthService {
     };
   }
 
-  // ── Logout ──────────────────────────────────
+  // -- Logout ---------------------------------
 
   static async logout(sessionId: number): Promise<void> {
     await AuthModel.invalidateSession(sessionId);
   }
 
-  // ── Format User ─────────────────────────────
+  // -- Format User ----------------------------
 
   private static formatUser(user: DashboardUserRow): LoginResult["user"] {
     return {
@@ -290,7 +309,7 @@ export class AuthService {
     };
   }
 
-  // ── Util: Create Magic Link Session ─────────
+  // -- Create Magic Link Session --------------
   // Called from access management module when owner creates a user
 
   static async createMagicLinkSession(params: {

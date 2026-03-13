@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { AmbassadorController, AdminController } from "./controller.ts";
 import { authenticate } from "../../middleware/auth.ts";
-import { requireAdmin } from "../../middleware/requireAdmin.ts";
 
 const router = Router();
 
@@ -81,37 +80,15 @@ router.post(
 );
 
 /* ===== ADMIN ROUTES (2) ===== */
-
-/**
- * GET /api/admin/ambassadors
- * Get admin dashboard (stats + ambassador list)
- * Query params:
- *  - page: number (default: 1)
- *  - limit: number (default: 20)
- *  - search: string (optional)
- *  - sort: "newest" | "most_active" (default: newest)
- * Returns: {
- *   stats: { total_ambassadors, total_stories, top_ambassadors, ... }
- *   ambassadors: { items, total, page, limit }
- * }
- */
 router.get(
   "/admin/ambassadors",
   authenticate,
-  requireAdmin,
   AdminController.getDashboard,
 );
 
-/**
- * DELETE /api/admin/ambassadors/:id
- * Delete ambassador profile or story (auto-detects type)
- * - If ID is ambassador_id: deletes entire profile + all stories
- * - If ID is story_id: deletes only that story
- */
 router.delete(
   "/admin/ambassadors/:id",
   authenticate,
-  requireAdmin,
   AdminController.delete,
 );
 
