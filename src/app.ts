@@ -35,48 +35,25 @@ const app: Application = express();
 
 app.use(morgan("dev"));
 
-// const allowedOrigins = new Set(
-//   [process.env.APP_URL, process.env.FRONTEND_URL].filter(
-//     (v): v is string => typeof v === "string" && v.length > 0,
-//   ),
-// );
-
-// const corsOptions: cors.CorsOptions = {
-//   origin(origin, callback) {
-//     if (!origin) return callback(null, true);
-//     if (allowedOrigins.has(origin)) return callback(null, true);
-//     return callback(new Error(`CORS blocked origin: ${origin}`));
-//   },
-//   credentials: true,
-//   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-//   allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token"],
-// };
-
-// app.use(cors(corsOptions));
-// app.options(/.*/, cors(corsOptions));
-
-const allowedOrigins = new Set([
-  "http://localhost:5173",
-  "http://198.71.58.248",
-]);
+const allowedOrigins = new Set(
+  [process.env.APP_URL, process.env.FRONTEND_URL].filter(
+    (v): v is string => typeof v === "string" && v.length > 0,
+  ),
+);
 
 const corsOptions: cors.CorsOptions = {
   origin(origin, callback) {
-    console.log("CORS check origin:", origin);
-
     if (!origin) return callback(null, true);
     if (allowedOrigins.has(origin)) return callback(null, true);
-
     return callback(new Error(`CORS blocked origin: ${origin}`));
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
   allowedHeaders: ["Content-Type", "Authorization", "X-CSRF-Token", "x-device-fingerprint"],
 };
 
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
-
 
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
