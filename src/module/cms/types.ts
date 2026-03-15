@@ -102,9 +102,13 @@ export interface UpdatePageMetaInput {
 
 export interface TeamMember {
   id: string;
-  full_name: string;
-  role: string;
+  name: string;
+  designation: string;
+  department: string;
+  expertise_tags: string[];
+  role_type: string;
   contribution: string | null;
+  card_description: string | null;
   profile_image_url: string | null;
   joined: string | null;
   email: string | null;
@@ -115,9 +119,13 @@ export interface TeamMember {
 }
 
 export interface CreateTeamMemberInput {
-  full_name: string;
-  role: string;
+  name: string;
+  designation: string;
+  department: string;
+  expertise_tags: string[];
+  role_type: string;
   contribution?: string | null;
+  card_description?: string | null;
   profile_image_url?: string | null;
   joined?: string | null;
   email?: string | null;
@@ -127,9 +135,13 @@ export interface CreateTeamMemberInput {
 
 export interface UpdateTeamMemberInput {
   id: string;
-  full_name?: string;
-  role?: string;
+  name?: string;
+  designation?: string;
+  department?: string;
+  expertise_tags?: string[];
+  role_type?: string;
   contribution?: string | null;
+  card_description?: string | null;
   profile_image_url?: string | null;
   joined?: string | null;
   email?: string | null;

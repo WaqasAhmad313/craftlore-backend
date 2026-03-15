@@ -649,24 +649,34 @@ export class TeamMemberController {
    */
   static async createMember(req: Request, res: Response): Promise<void> {
     try {
-      const { full_name, role, contribution, joined, email, display_order, is_active } = req.body;
+      const {
+        name, designation, department, expertise_tags,
+        role_type, contribution, card_description,
+        joined, email, display_order, is_active,
+      } = req.body;
 
-      if (!full_name || !role) {
+      if (!name || !designation) {
         res.status(400).json({
           success: false,
-          error: 'Missing required fields: full_name, role',
+          error: 'Missing required fields: name, designation',
         });
         return;
       }
 
       const input: CreateTeamMemberInput = {
-        full_name,
-        role,
-        contribution: contribution || null,
-        joined: joined || null,
-        email: email || null,
-        display_order: display_order ?? 0,
-        is_active: is_active ?? true,
+        name,
+        designation,
+        department:       department       || '',
+        expertise_tags:   expertise_tags
+          ? (typeof expertise_tags === 'string' ? JSON.parse(expertise_tags) : expertise_tags)
+          : [],
+        role_type:        role_type        || '',
+        contribution:     contribution     || null,
+        card_description: card_description || null,
+        joined:           joined           || null,
+        email:            email            || null,
+        display_order:    display_order    ?? 0,
+        is_active:        is_active        ?? true,
       };
 
       const profileImage = (req.file as MulterFile | undefined);
@@ -674,13 +684,10 @@ export class TeamMemberController {
 
       res.status(201).json({
         success: true,
-        data: {
-          member,
-        },
+        data: { member },
         message: 'Team member created successfully',
       });
     } catch (error) {
-      console.error('Error creating team member:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to create team member',
@@ -695,7 +702,11 @@ export class TeamMemberController {
   static async updateMember(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      const { full_name, role, contribution, joined, email, display_order, is_active } = req.body;
+      const {
+        name, designation, department, expertise_tags,
+        role_type, contribution, card_description,
+        joined, email, display_order, is_active,
+      } = req.body;
 
       if (!id) {
         res.status(400).json({
@@ -707,13 +718,21 @@ export class TeamMemberController {
 
       const input: UpdateTeamMemberInput = {
         id,
-        full_name,
-        role,
-        contribution: contribution !== undefined ? contribution : undefined,
-        joined: joined !== undefined ? joined : undefined,
-        email: email !== undefined ? email : undefined,
-        display_order,
-        is_active,
+        ...(name             !== undefined && { name }),
+        ...(designation      !== undefined && { designation }),
+        ...(department       !== undefined && { department }),
+        ...(expertise_tags   !== undefined && {
+          expertise_tags: typeof expertise_tags === 'string'
+            ? JSON.parse(expertise_tags)
+            : expertise_tags,
+        }),
+        ...(role_type        !== undefined && { role_type }),
+        ...(contribution     !== undefined && { contribution }),
+        ...(card_description !== undefined && { card_description }),
+        ...(joined           !== undefined && { joined }),
+        ...(email            !== undefined && { email }),
+        ...(display_order    !== undefined && { display_order }),
+        ...(is_active        !== undefined && { is_active }),
       };
 
       const profileImage = (req.file as MulterFile | undefined);
@@ -721,13 +740,15 @@ export class TeamMemberController {
 
       res.status(200).json({
         success: true,
-        data: {
-          member,
-        },
+        data: { member },
         message: 'Team member updated successfully',
       });
     } catch (error) {
-      console.error('Error updating team member:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to update team member',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
 
       if (error instanceof Error && error.message === 'Team member not found') {
         res.status(404).json({

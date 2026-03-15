@@ -374,16 +374,22 @@ export class TeamMemberModel {
   static async create(input: CreateTeamMemberInput): Promise<TeamMember> {
     const query = `
       INSERT INTO content.team_members (
-        full_name, role, contribution, profile_image_url, joined, email, display_order, is_active
+        name, designation, department, expertise_tags, role_type,
+        contribution, card_description, profile_image_url,
+        joined, email, display_order, is_active
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *
     `;
 
     const values = [
-      input.full_name,
-      input.role,
+      input.name,
+      input.designation,
+      input.department,
+      JSON.stringify(input.expertise_tags ?? []),
+      input.role_type,
       input.contribution ?? null,
+      input.card_description ?? null,
       input.profile_image_url ?? null,
       input.joined ?? null,
       input.email ?? null,
@@ -412,21 +418,28 @@ export class TeamMemberModel {
 
     const query = `
       UPDATE content.team_members
-      SET full_name = $1, role = $2, contribution = $3, profile_image_url = $4,
-          joined = $5, email = $6, display_order = $7, is_active = $8, updated_at = NOW()
-      WHERE id = $9
+      SET name = $1, designation = $2, department = $3,
+          expertise_tags = $4::jsonb, role_type = $5,
+          contribution = $6, card_description = $7,
+          profile_image_url = $8, joined = $9, email = $10,
+          display_order = $11, is_active = $12, updated_at = NOW()
+      WHERE id = $13
       RETURNING *
     `;
 
     const values = [
-      input.full_name ?? current.full_name,
-      input.role ?? current.role,
-      input.contribution !== undefined ? input.contribution : current.contribution,
+      input.name              ?? current.name,
+      input.designation       ?? current.designation,
+      input.department        ?? current.department,
+      JSON.stringify(input.expertise_tags ?? current.expertise_tags),
+      input.role_type         ?? current.role_type,
+      input.contribution      !== undefined ? input.contribution      : current.contribution,
+      input.card_description  !== undefined ? input.card_description  : current.card_description,
       input.profile_image_url !== undefined ? input.profile_image_url : current.profile_image_url,
-      input.joined !== undefined ? input.joined : current.joined,
-      input.email !== undefined ? input.email : current.email,
-      input.display_order ?? current.display_order,
-      input.is_active ?? current.is_active,
+      input.joined            !== undefined ? input.joined            : current.joined,
+      input.email             !== undefined ? input.email             : current.email,
+      input.display_order     ?? current.display_order,
+      input.is_active         ?? current.is_active,
       input.id,
     ];
 

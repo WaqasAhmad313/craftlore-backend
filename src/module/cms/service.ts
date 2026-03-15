@@ -403,7 +403,10 @@ export class TeamMemberService {
     profileImage?: MulterFile
   ): Promise<TeamMember> {
     // Validate required fields
-    this.validateMemberInput(input);
+    this.validateMemberInput({
+      name:        input.name,
+      designation: input.designation,
+    });
 
     // Upload profile image if provided
     if (profileImage) {
@@ -420,28 +423,23 @@ export class TeamMemberService {
     input: UpdateTeamMemberInput,
     profileImage?: MulterFile
   ): Promise<TeamMember> {
-    // Check if member exists
     const existing = await TeamMemberModel.getById(input.id);
 
     if (!existing) {
       throw new Error('Team member not found');
     }
 
-    // Validate fields if provided
-    if (input.full_name || input.role) {
+    if (input.name || input.designation) {
       this.validateMemberInput({
-        full_name: input.full_name ?? existing.full_name,
-        role: input.role ?? existing.role,
+        name:        input.name        ?? existing.name,
+        designation: input.designation ?? existing.designation,
       });
     }
 
-    // Upload new profile image if provided
     if (profileImage) {
-      // Delete old image
       if (existing.profile_image_url) {
         await CMSImageUploader.deleteImage(existing.profile_image_url);
       }
-
       input.profile_image_url = await CMSImageUploader.uploadProfileImage(profileImage);
     }
 
@@ -486,21 +484,21 @@ export class TeamMemberService {
   /**
    * Validate team member input
    */
-  private static validateMemberInput(input: { full_name: string; role: string }): void {
-    if (!input.full_name || input.full_name.trim().length === 0) {
-      throw new Error('Full name is required');
+  private static validateMemberInput(input: { name: string; designation: string }): void {
+    if (!input.name || input.name.trim().length === 0) {
+      throw new Error('Name is required');
     }
 
-    if (input.full_name.trim().length < 2) {
-      throw new Error('Full name must be at least 2 characters long');
+    if (input.name.trim().length < 2) {
+      throw new Error('Name must be at least 2 characters long');
     }
 
-    if (!input.role || input.role.trim().length === 0) {
-      throw new Error('Role is required');
+    if (!input.designation || input.designation.trim().length === 0) {
+      throw new Error('Designation is required');
     }
 
-    if (input.role.trim().length < 2) {
-      throw new Error('Role must be at least 2 characters long');
+    if (input.designation.trim().length < 2) {
+      throw new Error('Designation must be at least 2 characters long');
     }
   }
 }
