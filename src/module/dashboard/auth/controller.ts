@@ -167,6 +167,35 @@ export class AuthController {
     }
   }
 
+  // ── GET /dashboard/auth/me ──────────────────
+
+  static async me(req: Request, res: Response): Promise<Response> {
+    try {
+      const user = req.dashboardUser;
+
+      if (user === undefined) {
+        return res.status(401).json({ message: "Unauthorized." });
+      }
+
+      return res.status(200).json({
+        user: {
+          id:                 user.id,
+          email:              user.email,
+          is_owner:           user.is_owner,
+          can_approve:        user.can_approve,
+          permissions:        user.permissions,
+          is_high_risk:       user.is_high_risk,
+          session_id:         user.session_id,
+          session_expires_at: user.session_expires_at,
+        },
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to fetch user.";
+      return res.status(500).json({ message });
+    }
+  }
+
   // ── POST /dashboard/auth/logout ─────────────
 
   static async logout(req: Request, res: Response): Promise<Response> {

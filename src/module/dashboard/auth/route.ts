@@ -28,6 +28,15 @@ router.post(
   AuthController.verifyMagicLink
 );
 
+// ── GET /dashboard/auth/me ─────────────────────────────────
+// Requires active session — used on app mount to verify session
+// No DB query — authMiddleware already fetched everything
+router.get(
+  "/me",
+  authMiddleware,
+  AuthController.me
+);
+
 // ── POST /dashboard/auth/logout ─────────────────────────────
 // Requires active session
 router.post(
