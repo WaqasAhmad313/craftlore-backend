@@ -69,7 +69,7 @@ export class AuthMailer {
         html:    payload.html,
       })) as ResendResponse;
 
-      if (response.error !== undefined) {
+      if (response.error !== undefined && response.error !== null) {
         this.logContext("RESEND_REJECTED", response.error);
         throw new Error(`Resend rejected email: ${response.error.message}`);
       }
@@ -117,7 +117,7 @@ export class AuthMailer {
   static async sendDeviceApprovalRequest(
     params: SendDeviceApprovalParams
   ): Promise<void> {
-    const approvalUrl = `${process.env["DASHBOARD_BASE_URL"] ?? ""}/dashboard/auth/device/approve/${params.approvalToken}`;
+    const approvalUrl = `${process.env["FRONTEND_URL"] ?? ""}/dashboard/auth/device/approve/${params.approvalToken}`;
 
     await this.sendMail({
       to:      params.to,

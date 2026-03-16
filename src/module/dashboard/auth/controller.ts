@@ -21,14 +21,40 @@ interface MagicLinkVerifyBody {
 // HELPERS
 // ============================================
 
+function parseBrowser(ua: string): string {
+  if (ua.includes("Edg/"))     return "Edge";
+  if (ua.includes("OPR/"))     return "Opera";
+  if (ua.includes("Chrome/"))  return "Chrome";
+  if (ua.includes("Firefox/")) return "Firefox";
+  if (ua.includes("Safari/"))  return "Safari";
+  return "Unknown";
+}
+
+function parseOs(ua: string): string {
+  if (ua.includes("Windows NT")) return "Windows";
+  if (ua.includes("Mac OS X"))   return "macOS";
+  if (ua.includes("Linux"))      return "Linux";
+  if (ua.includes("Android"))    return "Android";
+  if (ua.includes("iPhone") || ua.includes("iPad")) return "iOS";
+  return "Unknown";
+}
+
+function cleanIp(ip: string | undefined): string | null {
+  if (ip === undefined) return null;
+  // Strip IPv4-mapped IPv6 prefix ::ffff:
+  return ip.replace(/^::ffff:/, "");
+}
+
 function extractDeviceMetadata(req: Request): DeviceMetadata {
+  const ua = typeof req.headers["user-agent"] === "string"
+    ? req.headers["user-agent"]
+    : null;
+
   return {
-    browser:    null,
-    os:         null,
-    ip:         req.ip ?? null,
-    user_agent: typeof req.headers["user-agent"] === "string"
-      ? req.headers["user-agent"]
-      : null,
+    browser:    ua !== null ? parseBrowser(ua) : null,
+    os:         ua !== null ? parseOs(ua)      : null,
+    ip:         cleanIp(req.ip),
+    user_agent: ua,
   };
 }
 
