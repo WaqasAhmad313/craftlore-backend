@@ -76,6 +76,12 @@ export async function authMiddleware(
   next: NextFunction
 ): Promise<void> {
   try {
+    // Internal request — skip all auth checks
+    if (res.locals["skipAuth"] === true) {
+      next();
+      return;
+    }
+
     const token = extractToken(req);
 
     if (token === null) {

@@ -41,6 +41,15 @@ export function pendingInterceptor(
       // High risk — intercept and store in pending_changes
       const { entityId, payload } = await options.extractPayload(req);
 
+      const storedPayload = {
+        old:   payload.old,
+        new:   payload.new,
+        _meta: {
+          endpoint: req.originalUrl,
+          method:   req.method,
+        },
+      };
+
       await db.query(
         `
         INSERT INTO dashboard.pending_changes
@@ -53,7 +62,7 @@ export function pendingInterceptor(
           options.module,
           options.operation,
           entityId,
-          JSON.stringify(payload),
+          JSON.stringify(storedPayload),
         ]
       );
 
@@ -72,7 +81,7 @@ export function pendingInterceptor(
           entityId,
           JSON.stringify({ old: payload.old, new: payload.new }),
           JSON.stringify({
-            ip: req.ip ?? null,
+            ip:         req.ip ?? null,
             user_agent: req.headers["user-agent"] ?? null,
           }),
         ]

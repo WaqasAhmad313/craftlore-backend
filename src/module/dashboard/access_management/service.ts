@@ -107,28 +107,58 @@ export class AccessService {
   // ── Create Access ───────────────────────────
 
   static async createAccess(params: CreateAccessParams): Promise<void> {
-    // Check email not already taken
-    const existing = await AccessModel.findUserByEmail(
-      params.email.trim().toLowerCase()
-    );
+    const normalizedEmail = params.email.trim().toLowerCase();
+
+    const existing = await AccessModel.findUserByEmailFull(normalizedEmail);
 
     if (existing !== null) {
-      throw new Error("A user with this email already exists.");
+      if (existing.is_active) {
+        throw new Error("This user already has active dashboard access.");
+      }
+
+      // User exists but was deactivated — reactivate with new role + session
+      const expiresAt = new Date(Date.now() + params.durationMs);
+
+      await AccessModel.reactivateUser({
+        userId:     existing.id,
+        roleId:     params.roleId,
+        canApprove: params.canApprove,
+        metadata:   { name: params.name },
+      });
+
+      // Invalidate any old sessions
+      await AccessModel.revokeActiveSession(existing.id);
+
+      // Generate fresh magic link session + OTP
+      const { token, otp } = await AuthService.createMagicLinkSession({
+        userId:    existing.id,
+        createdBy: params.createdBy,
+        expiresAt,
+      });
+
+      const magicLinkUrl = `${process.env["FRONTEND_URL"] ?? ""}/dashboard/access/verify?token=${token}`;
+
+      await AccessMailer.sendAccessCreated({
+        to:       normalizedEmail,
+        name:     params.name,
+        magicLinkUrl,
+        otp,
+        expiresAt,
+      });
+
+      return;
     }
 
+    // Fresh user — create from scratch
     const expiresAt = new Date(Date.now() + params.durationMs);
 
-    // Hash a random placeholder password — user logs in via magic link only
-    const placeholderPassword = generateRandomPassword();
-    const passwordHash        = await argon2.hash(placeholderPassword);
-
-    // Placeholder access key — not used for magic link users
+    const placeholderPassword  = generateRandomPassword();
+    const passwordHash         = await argon2.hash(placeholderPassword);
     const placeholderAccessKey = generateRandomPassword();
     const accessKeyHash        = await argon2.hash(placeholderAccessKey);
 
-    // Insert user
     const user = await AccessModel.insertUser({
-      email:         params.email.trim().toLowerCase(),
+      email:         normalizedEmail,
       passwordHash,
       accessKeyHash,
       roleId:        params.roleId,
@@ -136,19 +166,17 @@ export class AccessService {
       metadata:      { name: params.name },
     });
 
-    // Generate magic link session + OTP
     const { token, otp } = await AuthService.createMagicLinkSession({
       userId:    user.id,
       createdBy: params.createdBy,
       expiresAt,
     });
 
-    const magicLinkUrl = `${process.env["DASHBOARD_BASE_URL"] ?? ""}/dashboard/access/verify?token=${token}`;
+    const magicLinkUrl = `${process.env["FRONTEND_URL"] ?? ""}/dashboard/access/verify?token=${token}`;
 
-    // Send email
     await AccessMailer.sendAccessCreated({
-      to:           params.email,
-      name:         params.name,
+      to:       normalizedEmail,
+      name:     params.name,
       magicLinkUrl,
       otp,
       expiresAt,

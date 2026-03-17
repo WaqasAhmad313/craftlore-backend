@@ -18,6 +18,10 @@ export interface PendingChangeRow {
   payload: {
     old: Record<string, unknown> | null;
     new: Record<string, unknown> | null;
+    _meta: {
+      endpoint: string;
+      method: string;
+    };
   };
   status: PendingStatus;
   reviewed_by: number | null;
@@ -35,6 +39,10 @@ export interface MyPendingChangeRow {
   payload: {
     old: Record<string, unknown> | null;
     new: Record<string, unknown> | null;
+    _meta: {
+      endpoint: string;
+      method: string;
+    };
   };
   status: PendingStatus;
   review_note: string | null;

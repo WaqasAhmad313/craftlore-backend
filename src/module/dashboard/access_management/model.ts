@@ -118,6 +118,49 @@ export class AccessModel {
     return result.rows[0] ?? null;
   }
 
+  static async findUserByEmailFull(
+    email: string
+  ): Promise<{ id: number; is_active: boolean } | null> {
+    const result = await db.query<{ id: number; is_active: boolean }>(
+      `
+      SELECT id, is_active
+      FROM   dashboard.users
+      WHERE  email    = $1
+        AND  is_owner = false
+      LIMIT  1
+      `,
+      [email]
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  static async reactivateUser(params: {
+    userId: number;
+    roleId: number;
+    canApprove: boolean;
+    metadata: Record<string, unknown>;
+  }): Promise<void> {
+    await db.query(
+      `
+      UPDATE dashboard.users
+      SET
+        role_id     = $2,
+        can_approve = $3,
+        metadata    = $4,
+        is_active   = true,
+        updated_at  = now()
+      WHERE id = $1
+      `,
+      [
+        params.userId,
+        params.roleId,
+        params.canApprove,
+        JSON.stringify(params.metadata),
+      ]
+    );
+  }
+
   static async listUsersWithSessions(): Promise<AccessUserWithSessionRow[]> {
     const result = await db.query<AccessUserWithSessionRow>(
       `

@@ -70,7 +70,7 @@ export class AccessMailer {
         html:    payload.html,
       })) as ResendResponse;
 
-      if (response.error !== undefined) {
+      if (response.error !== undefined && response.error !== null) {
         this.logContext("RESEND_REJECTED", response.error);
         throw new Error(`Resend rejected email: ${response.error.message}`);
       }
