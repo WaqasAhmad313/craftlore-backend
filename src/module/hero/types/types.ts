@@ -32,7 +32,6 @@ export interface BaseHero {
   badge_icon: BadgeIcon;
   location: string | null;
   recognition_date: string;
-  claim_data: ClaimData | null;
   is_claimed: boolean;
   created_at: string;
   updated_at: string;

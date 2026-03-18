@@ -1,4 +1,4 @@
-import type { Response } from "express";
+import type { Request, Response } from "express";
 import { AmbassadorService, AdminService } from "./service.ts";
 import type { AuthenticatedRequest } from "../../middleware/auth.ts";
 import type {
@@ -80,10 +80,10 @@ export class AmbassadorController {
         view: view as "profiles" | "stories",
         page,
         limit,
-        search,
         filter: filter as "all" | "featured",
         sort: sort as "newest" | "most_active" | "most_liked" | "most_shared",
-        ambassador_id: ambassadorId,
+        ...(search !== undefined      && { search }),
+        ...(ambassadorId !== undefined && { ambassador_id: ambassadorId }),
       };
 
       const currentUserId = req.user?.id;
@@ -419,7 +419,7 @@ export class AdminController {
    * Get admin dashboard (stats + list)
    */
   static async getDashboard(
-    req: AuthenticatedRequest,
+    req: Request,
     res: Response
   ): Promise<Response> {
     try {
@@ -430,7 +430,6 @@ export class AdminController {
       const search = req.query.search as string | undefined;
       const sort = (req.query.sort as string) ?? "newest";
 
-      // Validate sort
       const validSorts = ["newest", "most_active"];
       if (!validSorts.includes(sort)) {
         return res.status(400).json({
@@ -442,8 +441,8 @@ export class AdminController {
       const data = await AdminService.getDashboard({
         page,
         limit,
-        search,
         sort: sort as "newest" | "most_active",
+        ...(search !== undefined && { search }),
       });
 
       console.log(
@@ -452,16 +451,12 @@ export class AdminController {
         "ambassadors"
       );
 
-      return res.json({
-        success: true,
-        data,
-      });
+      return res.json({ success: true, data });
     } catch (error) {
       console.error("❌ [ADMIN] Dashboard error:", error);
       return res.status(400).json({
         success: false,
-        message:
-          error instanceof Error ? error.message : "Failed to get dashboard data",
+        message: error instanceof Error ? error.message : "Failed to get dashboard data",
       });
     }
   }
@@ -471,27 +466,23 @@ export class AdminController {
    * Delete ambassador or story
    */
   static async delete(
-    req: AuthRequestWithId,
+    req: Request,
     res: Response
   ): Promise<Response> {
     try {
-      console.log("🗑️ [ADMIN] Delete request:", req.params.id);
+      console.log("🗑️ [ADMIN] Delete request:", req.params["id"]);
 
-      const { id } = req.params;
+      const id = req.params["id"] ?? "";
       const result = await AdminService.delete(id);
 
       console.log("✅ [ADMIN] Deleted:", result.message);
 
-      return res.json({
-        success: true,
-        message: result.message,
-      });
+      return res.json({ success: true, message: result.message });
     } catch (error) {
       console.error("❌ [ADMIN] Delete error:", error);
       return res.status(404).json({
         success: false,
-        message:
-          error instanceof Error ? error.message : "Ambassador or story not found",
+        message: error instanceof Error ? error.message : "Ambassador or story not found",
       });
     }
   }

@@ -114,7 +114,7 @@ router.post("/ambassadors/profile", authenticate, AmbassadorController.createOrU
 router.post("/ambassadors/stories", authenticate, AmbassadorController.createStory);
 router.put("/ambassadors/stories/:storyId", authenticate, AmbassadorController.editStory);
 router.post("/ambassadors/stories/:storyId/interact", AmbassadorController.interact);
-router.get("/admin/ambassadors", authenticate, AdminController.getDashboard);
+router.get("/admin/ambassadors", AdminController.getDashboard);
 
 // ── Dashboard: DELETE /admin/ambassadors/:id ─────────────────
 router.delete(

@@ -37,6 +37,9 @@ export function logActivity(options: ActivityLogOptions): RequestHandler {
       const user = req.dashboardUser;
       if (user === undefined) return;
 
+      // Owner actions are not logged
+      if (user.is_owner) return;
+
       const meta = (() => {
         try {
           return options.extractMeta !== undefined ? options.extractMeta(req) : {};
