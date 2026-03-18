@@ -9,12 +9,10 @@ interface PendingInterceptOptions {
   extractPayload: (req: Request) => Promise<{
     entityId: string | null;
     payload: {
-      old: Record<string, unknown> | null;
       new: Record<string, unknown> | null;
     };
   }>;
 }
-
 
 export function pendingInterceptor(
   options: PendingInterceptOptions
@@ -42,7 +40,6 @@ export function pendingInterceptor(
       const { entityId, payload } = await options.extractPayload(req);
 
       const storedPayload = {
-        old:   payload.old,
         new:   payload.new,
         _meta: {
           endpoint: req.originalUrl,
@@ -79,7 +76,7 @@ export function pendingInterceptor(
           options.module,
           `${options.operation}_pending`,
           entityId,
-          JSON.stringify({ old: payload.old, new: payload.new }),
+          JSON.stringify({ new: payload.new }),
           JSON.stringify({
             ip:         req.ip ?? null,
             user_agent: req.headers["user-agent"] ?? null,

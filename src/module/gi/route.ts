@@ -40,7 +40,6 @@ router.post(
     extractPayload: async (req) => ({
       entityId: null,
       payload: {
-        old: null,
         new: req.body as Record<string, unknown>,
       },
     }),
@@ -50,7 +49,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   GICraftController.upsertCraft
@@ -68,7 +67,6 @@ router.delete(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: null,
       },
     }),
@@ -78,10 +76,6 @@ router.delete(
     action: "delete",
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
-      diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
-        new: null,
-      },
     }),
   }),
   GICraftController.deleteCraftById

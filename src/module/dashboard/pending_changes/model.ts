@@ -16,7 +16,6 @@ export interface PendingChangeRow {
   operation: PendingOperation;
   entity_id: string | null;
   payload: {
-    old: Record<string, unknown> | null;
     new: Record<string, unknown> | null;
     _meta: {
       endpoint: string;
@@ -37,7 +36,6 @@ export interface MyPendingChangeRow {
   operation: PendingOperation;
   entity_id: string | null;
   payload: {
-    old: Record<string, unknown> | null;
     new: Record<string, unknown> | null;
     _meta: {
       endpoint: string;

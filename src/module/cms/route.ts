@@ -75,7 +75,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   PageContentController.createContent
@@ -90,7 +90,6 @@ router.put(
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -118,7 +117,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   PageMetaController.createMeta
@@ -133,7 +132,6 @@ router.put(
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -171,7 +169,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   TeamMemberController.createMember
@@ -186,7 +184,6 @@ router.put(
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),

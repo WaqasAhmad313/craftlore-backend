@@ -104,7 +104,7 @@ router.post(
     operation: "create",
     extractPayload: async (req) => ({
       entityId: null,
-      payload: { old: null, new: req.body as Record<string, unknown> },
+      payload: { new: req.body as Record<string, unknown> },
     }),
   }),
   logActivity({
@@ -112,7 +112,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   CategoryController.create
@@ -130,7 +130,6 @@ router.put(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -141,7 +140,6 @@ router.put(
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -161,7 +159,6 @@ router.delete(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: null,
       },
     }),
@@ -171,10 +168,6 @@ router.delete(
     action: "delete",
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
-      diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
-        new: null,
-      },
     }),
   }),
   CategoryController.remove
@@ -191,7 +184,7 @@ router.post(
     operation: "create",
     extractPayload: async (req) => ({
       entityId: null,
-      payload: { old: null, new: req.body as Record<string, unknown> },
+      payload: { new: req.body as Record<string, unknown> },
     }),
   }),
   logActivity({
@@ -199,7 +192,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   SubcategoryController.create
@@ -217,7 +210,6 @@ router.put(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -228,7 +220,6 @@ router.put(
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -248,7 +239,6 @@ router.delete(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: null,
       },
     }),
@@ -258,10 +248,6 @@ router.delete(
     action: "delete",
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
-      diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
-        new: null,
-      },
     }),
   }),
   SubcategoryController.remove
@@ -279,7 +265,7 @@ router.post(
     operation: "create",
     extractPayload: async (req) => ({
       entityId: null,
-      payload: { old: null, new: req.body as Record<string, unknown> },
+      payload: { new: req.body as Record<string, unknown> },
     }),
   }),
   logActivity({
@@ -287,7 +273,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   ProductController.create
@@ -306,7 +292,6 @@ router.put(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -317,7 +302,6 @@ router.put(
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -337,7 +321,6 @@ router.delete(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: null,
       },
     }),
@@ -347,10 +330,6 @@ router.delete(
     action: "delete",
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
-      diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
-        new: null,
-      },
     }),
   }),
   ProductController.remove
@@ -367,7 +346,7 @@ router.post(
     operation: "create",
     extractPayload: async (req) => ({
       entityId: null,
-      payload: { old: null, new: req.body as Record<string, unknown> },
+      payload: { new: req.body as Record<string, unknown> },
     }),
   }),
   logActivity({
@@ -375,7 +354,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   CalculatorController.create
@@ -393,7 +372,6 @@ router.put(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -404,7 +382,6 @@ router.put(
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -424,7 +401,6 @@ router.patch(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -435,7 +411,6 @@ router.patch(
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -455,7 +430,6 @@ router.delete(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: null,
       },
     }),
@@ -465,10 +439,6 @@ router.delete(
     action: "delete",
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
-      diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
-        new: null,
-      },
     }),
   }),
   CalculatorController.remove

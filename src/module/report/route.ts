@@ -74,7 +74,6 @@ router.patch(
     extractPayload: async (req) => ({
       entityId: null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -85,7 +84,6 @@ router.patch(
     extractMeta: (req) => ({
       entityId: null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),

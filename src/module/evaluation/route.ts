@@ -49,7 +49,6 @@ router.put(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -60,7 +59,6 @@ router.put(
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),

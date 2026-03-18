@@ -64,7 +64,6 @@ router.post(
     extractPayload: async (req) => ({
       entityId: null,
       payload: {
-        old: null,
         new: req.body as Record<string, unknown>,
       },
     }),
@@ -74,7 +73,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   CourseController.createCourse
@@ -92,7 +91,6 @@ router.post(
     extractPayload: async (req) => ({
       entityId: req.params["courseId"] ?? null,
       payload: {
-        old: null,
         new: req.body as Record<string, unknown>,
       },
     }),
@@ -102,7 +100,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: req.params["courseId"] ?? null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   async (req, res) => {
@@ -133,7 +131,6 @@ router.post(
     extractPayload: async (req) => ({
       entityId: null,
       payload: {
-        old: null,
         new: req.body as Record<string, unknown>,
       },
     }),
@@ -143,7 +140,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   CourseController.createLesson
@@ -161,7 +158,6 @@ router.post(
     extractPayload: async (req) => ({
       entityId: null,
       payload: {
-        old: null,
         new: req.body as Record<string, unknown>,
       },
     }),
@@ -171,7 +167,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   CourseController.createQuiz

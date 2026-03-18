@@ -155,7 +155,6 @@ router.patch(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -166,7 +165,6 @@ router.patch(
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -185,7 +183,7 @@ router.post(
     operation: "create",
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
-      payload: { old: null, new: req.body as Record<string, unknown> },
+      payload: { new: req.body as Record<string, unknown> },
     }),
   }),
   logActivity({
@@ -193,7 +191,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   MembershipController.addToNetwork
@@ -211,7 +209,6 @@ router.patch(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -222,7 +219,6 @@ router.patch(
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -242,7 +238,6 @@ router.delete(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: null,
       },
     }),
@@ -252,10 +247,6 @@ router.delete(
     action: "delete",
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
-      diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
-        new: null,
-      },
     }),
   }),
   MembershipController.deleteNetworkMember

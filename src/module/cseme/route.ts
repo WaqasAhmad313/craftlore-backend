@@ -112,7 +112,7 @@ router.post(
     operation: "create",
     extractPayload: async (req) => ({
       entityId: null,
-      payload: { old: null, new: req.body as Record<string, unknown> },
+      payload: { new: req.body as Record<string, unknown> },
     }),
   }),
   logActivity({
@@ -120,7 +120,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   CsemeController.createCraft
@@ -138,7 +138,6 @@ router.patch(
     extractPayload: async (req) => ({
       entityId: req.params["craftId"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -149,7 +148,6 @@ router.patch(
     extractMeta: (req) => ({
       entityId: req.params["craftId"] ?? null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -169,7 +167,6 @@ router.delete(
     extractPayload: async (req) => ({
       entityId: req.params["craftId"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: null,
       },
     }),
@@ -179,10 +176,6 @@ router.delete(
     action: "delete",
     extractMeta: (req) => ({
       entityId: req.params["craftId"] ?? null,
-      diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
-        new: null,
-      },
     }),
   }),
   CsemeController.deleteCraft
@@ -199,7 +192,7 @@ router.post(
     operation: "create",
     extractPayload: async (req) => ({
       entityId: null,
-      payload: { old: null, new: req.body as Record<string, unknown> },
+      payload: { new: req.body as Record<string, unknown> },
     }),
   }),
   logActivity({
@@ -207,7 +200,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   CsemeController.createDataset
@@ -225,7 +218,6 @@ router.patch(
     extractPayload: async (req) => ({
       entityId: req.params["datasetId"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -236,7 +228,6 @@ router.patch(
     extractMeta: (req) => ({
       entityId: req.params["datasetId"] ?? null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -256,7 +247,6 @@ router.delete(
     extractPayload: async (req) => ({
       entityId: req.params["datasetId"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: null,
       },
     }),
@@ -266,10 +256,6 @@ router.delete(
     action: "delete",
     extractMeta: (req) => ({
       entityId: req.params["datasetId"] ?? null,
-      diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
-        new: null,
-      },
     }),
   }),
   CsemeController.deleteDataset
@@ -286,7 +272,7 @@ router.post(
     operation: "create",
     extractPayload: async (req) => ({
       entityId: req.params["datasetId"] ?? null,
-      payload: { old: null, new: req.body as Record<string, unknown> },
+      payload: { new: req.body as Record<string, unknown> },
     }),
   }),
   logActivity({
@@ -294,7 +280,7 @@ router.post(
     action: "create",
     extractMeta: (req) => ({
       entityId: req.params["datasetId"] ?? null,
-      diff: { old: null, new: req.body as Record<string, unknown> },
+      diff: { new: req.body as Record<string, unknown> },
     }),
   }),
   CsemeController.createEconData
@@ -312,7 +298,6 @@ router.patch(
     extractPayload: async (req) => ({
       entityId: req.params["econId"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -323,7 +308,6 @@ router.patch(
     extractMeta: (req) => ({
       entityId: req.params["econId"] ?? null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -343,7 +327,6 @@ router.delete(
     extractPayload: async (req) => ({
       entityId: req.params["econId"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: null,
       },
     }),
@@ -353,10 +336,6 @@ router.delete(
     action: "delete",
     extractMeta: (req) => ({
       entityId: req.params["econId"] ?? null,
-      diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
-        new: null,
-      },
     }),
   }),
   CsemeController.deleteEconData

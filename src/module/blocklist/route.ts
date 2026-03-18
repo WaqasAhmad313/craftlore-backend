@@ -46,7 +46,6 @@ router.post(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -57,7 +56,6 @@ router.post(
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
       diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: (req.body as { new?: Record<string, unknown> }).new ?? null,
       },
     }),
@@ -77,7 +75,6 @@ router.delete(
     extractPayload: async (req) => ({
       entityId: req.params["id"] ?? null,
       payload: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
         new: null,
       },
     }),
@@ -87,10 +84,6 @@ router.delete(
     action: "delete",
     extractMeta: (req) => ({
       entityId: req.params["id"] ?? null,
-      diff: {
-        old: (req.body as { old?: Record<string, unknown> }).old ?? null,
-        new: null,
-      },
     }),
   }),
   BlacklistController.deleteBlacklist
