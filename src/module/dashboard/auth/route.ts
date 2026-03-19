@@ -5,8 +5,18 @@ import { logActivity } from "../../../middleware/activityLogMiddleware.ts";
 
 const router = Router();
 
+// ── POST /dashboard/auth/verify-credentials ────────────────
+// Step 1 — email + password only
+// No authMiddleware — not logged in yet
+router.post(
+  "/verify-credentials",
+  AuthController.verifyCredentials
+);
+
 // ── POST /dashboard/auth/login ──────────────────────────────
-// Owner login — no authMiddleware (not logged in yet)
+// Step 2 — temp_token + access_key + fingerprint
+// Completes login, sets cookie
+// No authMiddleware — completing login flow
 router.post(
   "/login",
   AuthController.login
@@ -28,9 +38,8 @@ router.post(
   AuthController.verifyMagicLink
 );
 
-// ── GET /dashboard/auth/me ─────────────────────────────────
+// ── GET /dashboard/auth/me ──────────────────────────────────
 // Requires active session — used on app mount to verify session
-// No DB query — authMiddleware already fetched everything
 router.get(
   "/me",
   authMiddleware,

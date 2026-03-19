@@ -6,9 +6,13 @@ import type { DeviceMetadata } from "./service.ts";
 // TYPES
 // ============================================
 
-interface LoginBody {
+interface VerifyCredentialsBody {
   email: string;
   password: string;
+}
+
+interface VerifyAccessKeyBody {
+  temp_token: string;
   access_key: string;
 }
 
@@ -41,7 +45,6 @@ function parseOs(ua: string): string {
 
 function cleanIp(ip: string | undefined): string | null {
   if (ip === undefined) return null;
-  // Strip IPv4-mapped IPv6 prefix ::ffff:
   return ip.replace(/^::ffff:/, "");
 }
 
@@ -69,22 +72,58 @@ function extractFingerprint(req: Request): string | null {
 // ============================================
 
 export class AuthController {
-  // ── POST /dashboard/auth/login ──────────────
 
-  static async login(req: Request, res: Response): Promise<Response> {
+  // ── POST /dashboard/auth/verify-credentials ─
+  // Step 1 — verify email + password only
+  // Returns temp_token valid for 5 minutes
+  // No cookie set yet
+
+  static async verifyCredentials(req: Request, res: Response): Promise<Response> {
     try {
-      const body = req.body as LoginBody;
-
-      const { email, password, access_key } = body;
+      const body = req.body as VerifyCredentialsBody;
+      const { email, password } = body;
 
       if (
-        typeof email      !== "string" || email.trim()      === "" ||
-        typeof password   !== "string" || password.trim()   === "" ||
-        typeof access_key !== "string" || access_key.trim() === ""
+        typeof email    !== "string" || email.trim()    === "" ||
+        typeof password !== "string" || password.trim() === ""
       ) {
         return res
           .status(400)
-          .json({ message: "Email, password and access key are required." });
+          .json({ message: "Email and password are required." });
+      }
+
+      const result = await AuthService.verifyCredentials({
+        email:    email.trim().toLowerCase(),
+        password,
+      });
+
+      return res.status(200).json({
+        message:    "Credentials verified. Please enter your access key.",
+        temp_token: result.tempToken,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Verification failed.";
+      return res.status(401).json({ message });
+    }
+  }
+
+  // ── POST /dashboard/auth/login ──────────────
+  // Step 2 — verify access key + fingerprint
+  // Completes login, sets session cookie
+
+  static async login(req: Request, res: Response): Promise<Response> {
+    try {
+      const body = req.body as VerifyAccessKeyBody;
+      const { temp_token, access_key } = body;
+
+      if (
+        typeof temp_token  !== "string" || temp_token.trim()  === "" ||
+        typeof access_key  !== "string" || access_key.trim()  === ""
+      ) {
+        return res
+          .status(400)
+          .json({ message: "Temp token and access key are required." });
       }
 
       const fingerprint = extractFingerprint(req);
@@ -95,15 +134,13 @@ export class AuthController {
           .json({ message: "Missing device fingerprint." });
       }
 
-      const result = await AuthService.ownerLogin({
-        email:           email.trim().toLowerCase(),
-        password,
-        accessKey:       access_key,
+      const result = await AuthService.verifyAccessKey({
+        tempToken:       temp_token.trim(),
+        accessKey:       access_key.trim(),
         fingerprintHash: fingerprint,
         deviceMetadata:  extractDeviceMetadata(req),
       });
 
-      // Set httpOnly cookie
       res.cookie("dashboard_token", result.token, {
         httpOnly: true,
         secure:   process.env["NODE_ENV"] === "production",
@@ -149,7 +186,6 @@ export class AuthController {
   static async verifyMagicLink(req: Request, res: Response): Promise<Response> {
     try {
       const body = req.body as MagicLinkVerifyBody;
-
       const { token, otp } = body;
 
       if (
@@ -175,7 +211,6 @@ export class AuthController {
         fingerprintHash: fingerprint,
       });
 
-      // Set httpOnly cookie with remaining session duration
       res.cookie("dashboard_token", result.token, {
         httpOnly: true,
         secure:   process.env["NODE_ENV"] === "production",
@@ -183,9 +218,7 @@ export class AuthController {
         expires:  result.expiresAt,
       });
 
-      return res.status(200).json({
-        message: "Access granted.",
-      });
+      return res.status(200).json({ message: "Access granted." });
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Verification failed.";

@@ -289,4 +289,86 @@ export class AuthModel {
       `
     );
   }
+
+  // ── Step 1 Token ────────────────────────────
+  // Short lived token stored in access_sessions
+  // context.step1_only = true marks it as incomplete
+
+  static async insertStep1Token(params: {
+    userId: number;
+    tokenHash: string;
+    expiresAt: Date;
+  }): Promise<void> {
+    await db.query(
+      `
+      INSERT INTO dashboard.access_sessions
+        (user_id, token_hash, expires_at, otp_hash, otp_expires_at, created_by, context)
+      VALUES
+        ($1, $2, $3, NULL, NULL, NULL, $4)
+      `,
+      [
+        params.userId,
+        params.tokenHash,
+        params.expiresAt,
+        JSON.stringify({ step1_only: true, magic_link: false }),
+      ]
+    );
+  }
+
+  static async findStep1Token(
+    tokenHash: string
+  ): Promise<{ id: number; user_id: number; expires_at: Date } | null> {
+    const result = await db.query<{
+      id: number;
+      user_id: number;
+      expires_at: Date;
+      context: { step1_only: boolean };
+    }>(
+      `
+      SELECT id, user_id, expires_at, context
+      FROM   dashboard.access_sessions
+      WHERE  token_hash = $1
+        AND  is_used    = false
+        AND  context->>'step1_only' = 'true'
+      LIMIT 1
+      `,
+      [tokenHash]
+    );
+
+    const row = result.rows[0] ?? null;
+    if (row === null) return null;
+
+    return {
+      id:         row.id,
+      user_id:    row.user_id,
+      expires_at: row.expires_at,
+    };
+  }
+
+  static async findUserById(
+    userId: number
+  ): Promise<DashboardUserRow | null> {
+    const result = await db.query<DashboardUserRow>(
+      `
+      SELECT
+        u.id,
+        u.email,
+        u.password_hash,
+        u.access_key_hash,
+        u.role_id,
+        u.is_owner,
+        u.can_approve,
+        u.is_active,
+        r.permissions,
+        r.is_high_risk
+      FROM  dashboard.users u
+      LEFT JOIN dashboard.roles r ON r.id = u.role_id
+      WHERE u.id = $1
+      LIMIT 1
+      `,
+      [userId]
+    );
+
+    return result.rows[0] ?? null;
+  }
 }

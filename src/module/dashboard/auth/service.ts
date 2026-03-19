@@ -19,6 +19,10 @@ export interface DeviceMetadata {
   user_agent: string | null;
 }
 
+export interface VerifyCredentialsResult {
+  tempToken: string;
+}
+
 export interface LoginResult {
   token: string;
   expiresAt: Date;
@@ -42,6 +46,7 @@ export interface MagicLinkVerifyResult {
 // ============================================
 
 const OWNER_SESSION_DURATION_MS = 1000 * 60 * 60 * 8;  // 8 hours
+const STEP1_TOKEN_EXPIRY_MS     = 1000 * 60 * 5;        // 5 minutes
 const OTP_EXPIRY_MS             = 1000 * 60 * 10;        // 10 minutes
 const DEVICE_TOKEN_EXPIRY_MS    = 1000 * 60 * 60 * 24;  // 24 hours
 const MAX_TRUSTED_DEVICES       = 2;
@@ -64,15 +69,15 @@ function generateOtp(): string {
 // ============================================
 
 export class AuthService {
-  // -- Owner Login ----------------------------
 
-  static async ownerLogin(params: {
+  // -- Step 1: Verify Email + Password --------
+  // Returns a short-lived temp token (5 min)
+  // No session created yet, no cookie set
+
+  static async verifyCredentials(params: {
     email: string;
     password: string;
-    accessKey: string;
-    fingerprintHash: string;
-    deviceMetadata: DeviceMetadata;
-  }): Promise<LoginResult> {
+  }): Promise<VerifyCredentialsResult> {
     const user = await AuthModel.findUserByEmail(params.email);
 
     if (user === null || !user.is_owner) {
@@ -92,30 +97,65 @@ export class AuthService {
       throw new Error("Invalid credentials.");
     }
 
+    // Create short-lived temp token — marks step 1 as passed
+    // Stored in access_sessions with context.step1_only = true
+    // Expires in 5 minutes
+    const tempToken  = generateSecureToken();
+    const expiresAt  = new Date(Date.now() + STEP1_TOKEN_EXPIRY_MS);
+
+    // Reuse insertSession with a placeholder OTP
+    // step1_only flag stored in context via isMagicLink = false
+    // We store user_id so step 2 can find the user
+    await AuthModel.insertStep1Token({
+      userId:     user.id,
+      tokenHash:  tempToken,
+      expiresAt,
+    });
+
+    return { tempToken };
+  }
+
+  // -- Step 2: Verify Access Key + Fingerprint -
+  // Completes login, creates real session, sets cookie
+
+  static async verifyAccessKey(params: {
+    tempToken: string;
+    accessKey: string;
+    fingerprintHash: string;
+    deviceMetadata: DeviceMetadata;
+  }): Promise<LoginResult> {
+    // Find the step1 token
+    const step1Session = await AuthModel.findStep1Token(params.tempToken);
+
+    if (step1Session === null) {
+      throw new Error("Invalid or expired verification. Please start again.");
+    }
+
+    if (new Date() > new Date(step1Session.expires_at)) {
+      throw new Error("Verification expired. Please start again.");
+    }
+
+    // Get the user
+    const user = await AuthModel.findUserById(step1Session.user_id);
+
+    if (user === null || !user.is_owner || !user.is_active) {
+      throw new Error("Invalid credentials.");
+    }
+
+    // Verify access key
     const accessKeyValid = await argon2.verify(
       user.access_key_hash,
       params.accessKey
     );
 
     if (!accessKeyValid) {
-      throw new Error("Invalid credentials.");
+      throw new Error("Invalid access key.");
     }
 
-    // -- Fingerprint / trusted device check ---
-    //
-    // Three possible states:
-    //
-    // 1. No trusted devices exist at all
-    //    -> First login ever
-    //    -> Accept, capture fingerprint, save as first trusted device
-    //
-    // 2. Trusted devices exist, fingerprint matches one
-    //    -> Known device, normal login
-    //
-    // 3. Trusted devices exist, fingerprint not found
-    //    -> Unknown device on established account
-    //    -> Send email approval, block login
+    // Invalidate the step1 token — it is single use
+    await AuthModel.invalidateSession(step1Session.id);
 
+    // -- Fingerprint / trusted device check ---
     const trustedDevice = await AuthModel.findTrustedDevice(
       user.id,
       params.fingerprintHash
@@ -140,7 +180,7 @@ export class AuthService {
       }
     }
 
-    // Create session
+    // Create real session
     const token     = generateSecureToken();
     const expiresAt = new Date(Date.now() + OWNER_SESSION_DURATION_MS);
     const otp       = generateOtp();
@@ -234,9 +274,6 @@ export class AuthService {
   }
 
   // -- Magic Link OTP Verify ------------------
-  // Called when created user clicks magic link + enters OTP
-  // Fingerprint is captured HERE on first use
-  // Every subsequent request validated in authMiddleware
 
   static async verifyMagicLinkOtp(params: {
     tokenHash: string;
@@ -278,7 +315,6 @@ export class AuthService {
       throw new Error("Invalid OTP.");
     }
 
-    // Lock fingerprint to session -- first and only capture for created users
     await AuthModel.verifyOtpAndLockFingerprint(
       session.id,
       params.fingerprintHash
@@ -310,7 +346,6 @@ export class AuthService {
   }
 
   // -- Create Magic Link Session --------------
-  // Called from access management module when owner creates a user
 
   static async createMagicLinkSession(params: {
     userId: number;
