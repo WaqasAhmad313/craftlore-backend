@@ -32,6 +32,28 @@ type ApiResponse<T = any> = SuccessResponse<T> | ErrorResponse;
  */
 class AuthorizedUserController {
   /**
+   * Get all authorized users across all crafts
+   * GET /api/authorized-users
+   */
+  async getAll(req: Request, res: Response<ApiResponse<any[]>>): Promise<void> {
+    try {
+      const result = await AuthorizedUserService.getAll();
+
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch authorized users';
+
+      res.status(500).json({
+        success: false,
+        error: errorMessage,
+      });
+    }
+  }
+
+  /**
    * Scrape and save authorized users
    * POST /api/authorized-users/scrape
    * Body: { applicationNumber: string }

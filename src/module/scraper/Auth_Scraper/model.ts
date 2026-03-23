@@ -78,6 +78,27 @@ export class AuthorizedUserModel {
     return result.rows;
   }
 
+  /**
+   * Get all authorized users joined with gi_products for craft name and category
+   */
+  static async getAll() {
+    const sql = `
+      SELECT
+        id,
+        gi_application_number,
+        authorized_user_no,
+        authorized_user_name,
+        authorized_user_address,
+        created_at,
+        updated_at
+      FROM authorized_users
+      ORDER BY gi_application_number, id
+    `;
+
+    const result = await db.query(sql);
+    return result.rows;
+  }
+
   static async getByAuthNumber(
     searchValue: string
   ): Promise<AuthorizedUserWithCategory> {

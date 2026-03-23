@@ -38,6 +38,18 @@ export class AuthorizedUserService {
   }
 
   /**
+   * Get all authorized users across all crafts
+   */
+  static async getAll() {
+    try {
+      return await AuthorizedUserModel.getAll();
+    } catch (error) {
+      console.error("❌ Error in getAll:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Get authorized user by auth number or full pattern with category
    * @param searchValue - Auth number (e.g., "362") or full pattern (e.g., "AU/362/GI/46/1")
    */
