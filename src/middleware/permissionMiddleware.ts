@@ -1,5 +1,4 @@
 import type { Request, Response, NextFunction, RequestHandler } from "express";
-// DashboardUser type is declared globally via authMiddleware.ts augmentation
 
 // ============================================
 // TYPES
@@ -19,10 +18,15 @@ export function requirePermission(
   action: PermissionAction
 ): RequestHandler {
   return (req: Request, res: Response, next: NextFunction): void => {
+    // Internal request — authMiddleware skipped attaching dashboardUser,
+    // so skip permission check too. The call was already reviewed/approved.
+    if (res.locals["skipAuth"] === true) {
+      next();
+      return;
+    }
+
     const user = req.dashboardUser;
 
-    // Should never happen if authMiddleware runs first
-    // but strict mode requires explicit guard
     if (user === undefined) {
       res.status(401).json({ message: "Unauthorized. No session attached." });
       return;
@@ -70,6 +74,12 @@ export function requireOwner(
   res: Response,
   next: NextFunction
 ): void {
+  // Internal request — skip owner check
+  if (res.locals["skipAuth"] === true) {
+    next();
+    return;
+  }
+
   const user = req.dashboardUser;
 
   if (user === undefined) {
@@ -87,16 +97,16 @@ export function requireOwner(
 
 // ============================================
 // APPROVER MIDDLEWARE
-// Checks:
-//   1. can_approve = true
-//   2. User has view access to the module
-//      (approval scope is derived from module access)
-// Usage:
-//   router.patch("/pending/:id/approve", authMiddleware, requireApprover("cktre"), handler)
 // ============================================
 
 export function requireApprover(module: string): RequestHandler {
   return (req: Request, res: Response, next: NextFunction): void => {
+    // Internal request — skip approver check
+    if (res.locals["skipAuth"] === true) {
+      next();
+      return;
+    }
+
     const user = req.dashboardUser;
 
     if (user === undefined) {
@@ -116,7 +126,6 @@ export function requireApprover(module: string): RequestHandler {
     }
 
     // Wildcard "*" — just check can_approve is true
-    // Actual module scope is enforced inside the service layer
     if (module === "*") {
       next();
       return;

@@ -17,6 +17,7 @@ interface ResolveBody {
 export class PendingController {
   // ── GET /dashboard/pending ──────────────────
   // Approver sees pending changes for modules they have access to
+  // Owner sees ALL pending changes across every module
 
   static async listPending(req: Request, res: Response): Promise<Response> {
     try {
@@ -26,10 +27,13 @@ export class PendingController {
         return res.status(401).json({ message: "Unauthorized." });
       }
 
-      // Derive allowed modules from user permissions
-      const allowedModules = Object.keys(user.permissions).filter(
-        (mod) => user.permissions[mod]?.["view"] === true
-      );
+      // Owner bypasses module scoping — use '*' sentinel meaning "all modules"
+      // Non-owners are scoped to modules where they have view permission
+      const allowedModules = user.is_owner
+        ? ["*"]
+        : Object.keys(user.permissions).filter(
+            (mod) => user.permissions[mod]?.["view"] === true
+          );
 
       // Optional filters from query
       const rawStatus = req.query["status"];
@@ -41,7 +45,7 @@ export class PendingController {
           : "all";
 
       const rawModule = req.query["module"];
-      const module    =
+      const module =
         typeof rawModule === "string" && rawModule.trim() !== ""
           ? rawModule.trim()
           : null;
@@ -50,6 +54,7 @@ export class PendingController {
         status,
         module,
         allowedModules,
+        isOwner: user.is_owner ?? false,
       });
 
       return res.status(200).json({ changes });
@@ -64,6 +69,7 @@ export class PendingController {
 
   // ── GET /dashboard/pending/mine ─────────────
   // Current user sees their own submitted changes
+  // Owner does not need this — their actions apply directly
 
   static async listMyPending(req: Request, res: Response): Promise<Response> {
     try {
@@ -108,6 +114,7 @@ export class PendingController {
       await PendingService.approve({
         pendingId,
         reviewedBy: user.id,
+        isOwner:    user.is_owner ?? false,
         action:     "approved",
         reviewNote,
       });
@@ -143,6 +150,7 @@ export class PendingController {
       await PendingService.reject({
         pendingId,
         reviewedBy: user.id,
+        isOwner:    user.is_owner ?? false,
         action:     "rejected",
         reviewNote,
       });

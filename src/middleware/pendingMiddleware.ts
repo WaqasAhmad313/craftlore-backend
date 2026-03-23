@@ -23,6 +23,15 @@ export function pendingInterceptor(
     next: NextFunction
   ): Promise<void> => {
     try {
+      // Internal request (triggered by applyChange on approval) —
+      // skip interception entirely and let the handler run directly.
+      // The change has already been reviewed; re-intercepting it
+      // would create a duplicate pending entry.
+      if (res.locals["skipAuth"] === true) {
+        next();
+        return;
+      }
+
       const user = req.dashboardUser;
 
       if (user === undefined) {

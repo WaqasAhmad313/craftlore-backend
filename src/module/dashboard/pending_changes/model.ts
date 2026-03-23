@@ -58,13 +58,16 @@ export interface ListPendingFilters {
 // ============================================
 
 export class PendingModel {
-  // ── List — approver view ────────────────────
+  // ── List — approver / owner view ───────────
+  //
+  // isOwner = true  → skip module scoping entirely, see all rows
+  // isOwner = false → rows scoped to allowedModules via ANY($1)
 
   static async listPending(
     filters: ListPendingFilters,
-    allowedModules: string[]
+    allowedModules: string[],
+    isOwner: boolean
   ): Promise<PendingChangeRow[]> {
-    // allowedModules scopes what the approver can see
     const result = await db.query<PendingChangeRow>(
       `
       SELECT
@@ -85,12 +88,12 @@ export class PendingModel {
       FROM  dashboard.pending_changes pc
       JOIN  dashboard.users u              ON u.id  = pc.user_id
       LEFT JOIN dashboard.users rv         ON rv.id = pc.reviewed_by
-      WHERE pc.module = ANY($1)
-        AND ($2::text = 'all' OR pc.status = $2)
-        AND ($3::text IS NULL  OR pc.module = $3)
+      WHERE ($1 OR pc.module = ANY($2))
+        AND ($3::text = 'all' OR pc.status = $3)
+        AND ($4::text IS NULL  OR pc.module = $4)
       ORDER BY pc.created_at DESC
       `,
-      [allowedModules, filters.status, filters.module]
+      [isOwner, allowedModules, filters.status, filters.module]
     );
 
     return result.rows;
@@ -158,8 +161,8 @@ export class PendingModel {
   // ── Resolve ─────────────────────────────────
 
   static async resolve(params: {
-    pendingId: number;
-    status: "approved" | "rejected";
+    pendingId:  number;
+    status:     "approved" | "rejected";
     reviewedBy: number;
     reviewNote: string | null;
   }): Promise<void> {

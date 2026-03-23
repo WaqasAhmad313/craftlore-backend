@@ -11,15 +11,17 @@ import type {
 // ============================================
 
 export interface ListPendingParams {
-  status: PendingStatus | "all";
-  module: string | null;
+  status:         PendingStatus | "all";
+  module:         string | null;
   allowedModules: string[];
+  isOwner:        boolean;
 }
 
 export interface ResolveParams {
-  pendingId: number;
+  pendingId:  number;
   reviewedBy: number;
-  action: "approved" | "rejected";
+  isOwner:    boolean;
+  action:     "approved" | "rejected";
   reviewNote: string | null;
 }
 
@@ -81,21 +83,22 @@ async function applyChange(
 // ============================================
 
 export class PendingService {
-  // -- List -- approver view ------------------
+  // -- List -- approver / owner view ----------
 
   static async listPending(
     params: ListPendingParams
   ): Promise<PendingChangeRow[]> {
-    if (params.allowedModules.length === 0) {
+    // Owner uses '*' sentinel — skip empty check and module scoping
+    const isOwner = params.isOwner;
+
+    // Non-owner with no accessible modules → return empty immediately
+    if (!isOwner && params.allowedModules.length === 0) {
       return [];
     }
 
-    const filters: ListPendingFilters = {
-      status: params.status,
-      module: params.module,
-    };
-
+    // Non-owner: validate that the requested module filter is within their scope
     if (
+      !isOwner &&
       params.module !== null &&
       !params.allowedModules.includes(params.module)
     ) {
@@ -104,7 +107,12 @@ export class PendingService {
       );
     }
 
-    return PendingModel.listPending(filters, params.allowedModules);
+    const filters: ListPendingFilters = {
+      status: params.status,
+      module: params.module,
+    };
+
+    return PendingModel.listPending(filters, params.allowedModules, isOwner);
   }
 
   // -- List -- user's own ---------------------
@@ -130,6 +138,12 @@ export class PendingService {
       );
     }
 
+    // Non-owner approvers cannot approve their own submissions
+    // Owner is exempt from this rule
+    if (!params.isOwner && pending.user_id === params.reviewedBy) {
+      throw new Error("You cannot approve your own submission.");
+    }
+
     await applyChange(pending, params.reviewedBy);
   }
 
@@ -146,6 +160,11 @@ export class PendingService {
       throw new Error(
         `This change has already been ${pending.status}.`
       );
+    }
+
+    // Non-owner approvers cannot reject their own submissions either
+    if (!params.isOwner && pending.user_id === params.reviewedBy) {
+      throw new Error("You cannot reject your own submission.");
     }
 
     await PendingModel.resolve({
